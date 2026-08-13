@@ -46,9 +46,12 @@ git push -u origin main
 3. Import GitHub repo `sochguru-cms`
 4. Framework Preset: Next.js
 5. Environment Variables (Project Settings → Environment Variables, not `.env` in the repo):
-   - `GEMINI_API_KEY` = your Gemini API key from aistudio.google.com (server-only — powers `/api/generate-content`; without it, content generation falls back to a local template)
+   - `GEMINI_API_KEY` = your Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (server-only — powers `/api/generate-content`; without it, content generation falls back to a local template)
    - `GEMINI_MODEL` = optional, defaults to `gemini-2.5-flash`
-   - `NEXT_PUBLIC_META_TOKEN` = your Facebook Page token (not yet wired to any API route)
+   - `META_ACCESS_TOKEN` = a long-lived Facebook Page access token (server-only — powers `/api/publish`). Get one via:
+     - Go to [developers.facebook.com](https://developers.facebook.com) → Your App → Settings → Basic, grab your App ID & Secret
+     - Use Graph API Explorer or Postman to POST to `/oauth/access_token` with your credentials to get a user token, then extend it to a page token
+     - Or: go to your Page → Settings → Roles → click "Generate Token" under Page Access Tokens (simpler, but tokens expire in 60 days)
 6. Deploy → You get URL: https://sochguru-cms.vercel.app
 7. Open on phone → Add to Home Screen → You have native app
 
@@ -59,13 +62,22 @@ vercel
 # Follow prompts, deploy
 ```
 
-### Agent-Ready Architecture (Future Agents)
-Current app works manually. Each step is ready for agents:
-- `/api/collect` -> Ingestion Agent
+### Real API Integration
+
+**Content Generation (`/api/generate-content`)**
+- Calls Gemini API with structured JSON schema (if `GEMINI_API_KEY` is set)
+- Falls back to local template if key is missing or call fails
+- Persona-aware: uses name, story, niche, audience to write bilingual content
+
+**Publishing (`/api/publish`)**
+- Posts bilingual statuses (Nepali + English) to Meta/Facebook page
+- Requires `META_ACCESS_TOKEN` (long-lived page/Instagram token)
+- Shows publish status inline (success, partial, or error details)
+
+### Remaining Agent-Ready Architecture (Future)
+These routes are stubbed and ready for agent integration:
 - `/api/clone-voice` -> Voice Clone Agent (ElevenLabs)
 - `/api/generate-avatar` -> Avatar Video Agent (HeyGen, Veo)
-- `/api/generate-content` -> Copywriter Agent (Gemini, Meta AI)
-- `/api/publish` -> Publisher Agent (Meta Graph API)
 - `/api/analytics` -> Analytics Agent
 
 When you plug agents, they listen to events: CreatorCreated, etc.

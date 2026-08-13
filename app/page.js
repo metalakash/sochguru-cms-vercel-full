@@ -12,6 +12,9 @@ export default function Page() {
   const [recording, setRecording] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [pubError, setPubError] = useState('')
+  const [pubResult, setPubResult] = useState(null)
 
   useEffect(()=>{
     const saved = localStorage.getItem('soch_cms_persona')
@@ -90,6 +93,27 @@ export default function Page() {
       setGenError('Could not generate content: '+err.message)
     }finally{
       setGenerating(false)
+    }
+  }
+
+  const publishToMeta = async ()=>{
+    if(!content) return
+    setPublishing(true)
+    setPubError('')
+    setPubResult(null)
+    try{
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pageId, content})
+      })
+      if(!res.ok) throw new Error('Server returned '+res.status)
+      const data = await res.json()
+      setPubResult(data)
+    }catch(err){
+      setPubError('Publish failed: '+err.message)
+    }finally{
+      setPublishing(false)
     }
   }
 
@@ -208,6 +232,14 @@ export default function Page() {
                 <div className="bg-black rounded p-2"><p className="text-orange-400">English Status (Global):</p><p>{content.englishStatus}</p></div>
                 <div className="bg-black rounded p-2"><p className="text-cyan-400">Nepali Video Script:</p><p className="whitespace-pre-wrap">{content.nepaliVideo}</p></div>
                 <div className="bg-black rounded p-2"><p>Image Prompt: {content.imagePrompt}</p><p className="mt-1">Veo Prompt: {content.veoPrompt}</p></div>
+                <button onClick={publishToMeta} disabled={publishing} className="orange w-full py-2 rounded-xl font-bold text-xs disabled:opacity-50 mt-2">{publishing ? 'Publishing…' : 'Publish to Meta/Facebook →'}</button>
+                {pubError && <p className="text-red-400 text-xs">{pubError}</p>}
+                {pubResult && (
+                  <div className={`rounded p-2 text-xs ${pubResult.status==='success' ? 'bg-green-900 text-green-100' : 'bg-yellow-900 text-yellow-100'}`}>
+                    <p className="font-bold">{pubResult.status==='success' ? '✓ Published!' : '⚠ Partial publish'}</p>
+                    {pubResult.results?.map((r, i)=><p key={i}>{r.type}: {r.status} {r.id && `(ID: ${r.id})`} {r.error && `— ${r.error}`}</p>)}
+                  </div>
+                )}
               </div>
             )}
           </div>
