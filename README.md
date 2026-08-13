@@ -45,9 +45,10 @@ git push -u origin main
 2. Go to https://vercel.com/new
 3. Import GitHub repo `sochguru-cms`
 4. Framework Preset: Next.js
-5. Environment Variables (optional for now):
-   - NEXT_PUBLIC_GEMINI_KEY = your Gemini API key from aistudio.google.com
-   - NEXT_PUBLIC_META_TOKEN = your Facebook Page token
+5. Environment Variables (Project Settings → Environment Variables, not `.env` in the repo):
+   - `GEMINI_API_KEY` = your Gemini API key from aistudio.google.com (server-only — powers `/api/generate-content`; without it, content generation falls back to a local template)
+   - `GEMINI_MODEL` = optional, defaults to `gemini-2.5-flash`
+   - `NEXT_PUBLIC_META_TOKEN` = your Facebook Page token (not yet wired to any API route)
 6. Deploy → You get URL: https://sochguru-cms.vercel.app
 7. Open on phone → Add to Home Screen → You have native app
 
