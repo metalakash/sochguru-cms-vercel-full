@@ -80,16 +80,17 @@ export async function POST(request) {
     return Response.json({ error: 'prompt is required' }, { status: 400 })
   }
 
-  try {
-    const generated = await callGemini(prompt)
-    if (generated) {
-      return Response.json({ ...generated, source: 'gemini' })
-    }
-  } catch (err) {
-    console.error('Gemini generation failed:', err.message)
+  if (!process.env.GEMINI_API_KEY) {
+    return Response.json({
+      error: 'No Gemini API key on the server. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables, then redeploy.'
+    }, { status: 503 })
   }
 
-  return Response.json({
-    error: 'Content generation not configured. Set GEMINI_API_KEY in environment.'
-  }, { status: 500 })
+  try {
+    const generated = await callGemini(prompt)
+    return Response.json({ ...generated, source: 'gemini' })
+  } catch (err) {
+    console.error('Gemini generation failed:', err.message)
+    return Response.json({ error: err.message }, { status: 502 })
+  }
 }

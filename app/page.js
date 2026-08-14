@@ -157,12 +157,12 @@ export default function Page() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({prompt: basicPrompt})
       })
-      if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
+      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
       trackAnalytics('basic_pack_generated', {source: data.source})
     }catch(err){
-      setBasicError('Generation failed: '+err.message)
+      setBasicError(err.message)
       trackAnalytics('basic_pack_generated', {status: 'error', error: err.message})
     }finally{
       setBasicGenerating(false)
@@ -286,168 +286,161 @@ export default function Page() {
   }
 
   if(!mode) return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black p-4">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="text-center py-12">
-          <p className="text-orange-400 text-sm font-bold mb-2">🇳🇵 BUILT IN KATHMANDU • FOR CREATORS WORLDWIDE</p>
-          <h1 className="text-5xl font-bold mb-4">SochGuru</h1>
-          <p className="text-xl text-gray-300 mb-2">Turn Your Ideas Into Bilingual Content in Minutes</p>
-          <p className="text-gray-400 max-w-2xl mx-auto">AI-powered content creation for creators who want to reach both their native culture AND the global audience. No more choosing between English or Nepali. Go bilingual. Go viral. Go big.</p>
-        </div>
+    <div className="min-h-screen">
+      <div className="max-w-3xl mx-auto px-6">
 
-        {/* The Problem & Solution */}
-        <div className="grid md:grid-cols-3 gap-6 my-16">
-          <div className="glass rounded-2xl p-6 text-center">
-            <p className="text-3xl mb-3">⏱️</p>
-            <h3 className="font-bold mb-2">The Time Drain</h3>
-            <p className="text-sm text-gray-400">Creating content for 2 languages takes 2x the time. Persona building, voice work, video editing... it's endless.</p>
-          </div>
-          <div className="glass rounded-2xl p-6 text-center">
-            <p className="text-3xl mb-3">🎯</p>
-            <h3 className="font-bold mb-2">Split Audience</h3>
-            <p className="text-sm text-gray-400">Choose English for global reach OR Nepali for home. Why choose? Nepal's best creators go global AND stay rooted.</p>
-          </div>
-          <div className="glass rounded-2xl p-6 text-center border-2 border-orange-500">
-            <p className="text-3xl mb-3">✨</p>
-            <h3 className="font-bold mb-2 text-orange-400">The SochGuru Way</h3>
-            <p className="text-sm text-gray-300"><strong>One prompt.</strong> Bilingual scripts. Avatar videos. Ready to post. 2 minutes.</p>
-          </div>
-        </div>
+        {/* Hero */}
+        <section className="pt-24 pb-20">
+          <p className="t-label mono mb-5">Hadigaun, Kathmandu</p>
+          <h1 className="t-display mb-6">
+            Write it once.<br/>
+            Publish it in both<br/>
+            <span style={{color:'var(--accent)'}}>Nepali and English.</span>
+          </h1>
+          <p className="t-lead max-w-xl">
+            Most tools make you pick a language. This one takes a single description
+            of your idea and returns the Nepali post, the English post, and the video
+            script for each — in one pass.
+          </p>
+        </section>
 
-        {/* Who This Is For */}
-        <div className="glass rounded-2xl p-8 mb-16">
-          <h2 className="text-2xl font-bold mb-6 text-center">This is for creators who:</h2>
-          <div className="grid md:grid-cols-2 gap-6 text-sm">
-            <div><p className="text-orange-400">✓</p> Have something important to say but not enough time to make content</div>
-            <div><p className="text-orange-400">✓</p> Want to reach both Nepal AND the world</div>
-            <div><p className="text-orange-400">✓</p> Are tired of fragmented workflows (recording voice, making avatars, writing scripts separately)</div>
-            <div><p className="text-orange-400">✓</p> Want their authentic voice (literally & figuratively) in every video</div>
-            <div><p className="text-orange-400">✓</p> Are building in public and need to move fast</div>
-            <div><p className="text-orange-400">✓</p> Believe Nepal's stories deserve a global platform</div>
+        {/* Who's building this */}
+        <section className="hairline py-16">
+          <p className="t-label mono mb-8">Who's building this</p>
+          <div className="space-y-5 t-body" style={{color:'var(--ink-2)'}}>
+            <p style={{color:'var(--ink)', fontSize:'1.0625rem', lineHeight:1.6}}>
+              I spent a decade in banking. Now I'm building with agentic AI from
+              Hadigaun, and posting about it as I go.
+            </p>
+            <p>
+              The problem I kept hitting was simple. My audience is split — friends and
+              peers here who read Nepali, and a wider tech audience that reads English.
+              Writing for one meant the other got a rushed translation, or nothing.
+              Doing both properly meant doing every step twice: the script, the tone,
+              the recording, the edit.
+            </p>
+            <p>
+              So I built the thing I needed. It's not a startup pitch. It's a tool I use
+              on my own posts, opened up in case your audience is split the same way.
+            </p>
+            <p style={{color:'var(--ink-3)'}}>
+              I don't have this all figured out. If something's broken or a translation
+              reads wrong, tell me — that's the fastest way this gets better.
+            </p>
           </div>
-        </div>
+        </section>
 
-        {/* Real Use Case */}
-        <div className="glass rounded-2xl p-8 mb-16 border border-cyan-500">
-          <h3 className="font-bold mb-4">Real Example: Akash's Week</h3>
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <p className="text-gray-400 text-sm mb-4"><strong className="text-red-400">❌ Without SochGuru:</strong></p>
-              <ul className="text-sm space-y-2 text-gray-300">
-                <li>Monday: Write English script (30 min)</li>
-                <li>Tuesday: Translate to Nepali (45 min)</li>
-                <li>Wednesday: Record voice samples (60 min)</li>
-                <li>Thursday: Wait for voice cloning (2 hours)</li>
-                <li>Friday: Generate avatars (3 hours)</li>
-                <li>Saturday: Edit & post both versions (2 hours)</li>
-                <li><strong>Total: 10+ hours</strong></li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-gray-400 text-sm mb-4"><strong className="text-green-400">✅ With SochGuru:</strong></p>
-              <ul className="text-sm space-y-2 text-gray-300">
-                <li>Monday 9:00 AM: Write one prompt</li>
-                <li>Monday 9:02 AM: Get bilingual scripts ready</li>
-                <li>Monday 9:05 AM: Post both versions</li>
-                <li>Monday 5:00 PM: Set up voice cloning (once)</li>
-                <li>Tuesday: Generate avatars on demand</li>
-                <li><strong className="text-green-400">Ongoing: 5 min per piece</strong></li>
-                <li className="text-green-400"><strong>Save 50+ hours/month</strong></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Choose Your Path */}
-        <div className="mb-16">
-          <h2 className="text-2xl font-bold text-center mb-8">Choose Your Path to Growth</h2>
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Basic */}
-            <div className="glass rounded-2xl p-8 hover:border-orange-500 transition border border-gray-700">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h3 className="text-2xl font-bold mb-1">🚀 Basic</h3>
-                  <p className="text-gray-400">For quick wins & testing</p>
-                </div>
-                <span className="text-xs bg-orange-900 text-orange-100 px-3 py-1 rounded-full">Start Free</span>
+        {/* What it actually does */}
+        <section className="hairline py-16">
+          <p className="t-label mono mb-8">What one prompt returns</p>
+          <div className="card divide-y" style={{borderColor:'var(--line)'}}>
+            {[
+              ['Nepali status', 'Short-form post, Romanized Nepali'],
+              ['English status', 'Same idea, written for a global feed'],
+              ['Nepali video script', 'Hook, main, call-to-action'],
+              ['English video script', 'Hook, main, call-to-action'],
+              ['Image prompt', 'For a consistent avatar look'],
+              ['Video prompt', '8s vertical, 9:16']
+            ].map(([name, desc]) => (
+              <div key={name} className="flex items-baseline justify-between gap-6 px-5 py-3.5" style={{borderColor:'var(--line)'}}>
+                <span className="text-sm font-medium">{name}</span>
+                <span className="t-sm text-right">{desc}</span>
               </div>
-              <p className="text-sm text-gray-300 mb-6">Describe your idea once. AI generates everything: persona, bilingual scripts, avatar prompts, ready-to-post content.</p>
-              <ul className="space-y-2 text-sm mb-8">
-                <li className="text-gray-300">✓ 1 prompt → full content pack</li>
-                <li className="text-gray-300">✓ Bilingual (English + Nepali)</li>
-                <li className="text-gray-300">✓ 2 minutes from idea to publish</li>
-                <li className="text-gray-300">✓ Great for: testing niches, rapid experimentation</li>
-                <li className="text-gray-400">✗ No voice cloning</li>
-                <li className="text-gray-400">✗ No avatar generation</li>
-              </ul>
-              <button onClick={()=>setMode('basic')} className="orange w-full py-3 rounded-xl font-bold">Start Creating Now →</button>
-              <p className="text-xs text-gray-500 text-center mt-3">Needs: Gemini API key (free tier available)</p>
-            </div>
+            ))}
+          </div>
+          <p className="t-sm mt-4">
+            You review and edit everything before it goes anywhere. Nothing publishes on its own.
+          </p>
+        </section>
 
-            {/* Pro */}
-            <div className="glass rounded-2xl p-8 hover:border-cyan-500 transition border border-cyan-500">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h3 className="text-2xl font-bold mb-1">⚡ Pro</h3>
-                  <p className="text-cyan-400">For serious creators</p>
-                </div>
-                <span className="text-xs bg-cyan-900 text-cyan-100 px-3 py-1 rounded-full">Full Suite</span>
+        {/* Two paths */}
+        <section className="hairline py-16">
+          <p className="t-label mono mb-8">Two ways in</p>
+          <div className="grid md:grid-cols-2 gap-4">
+
+            <div className="card p-6 flex flex-col">
+              <div className="flex items-center gap-2.5 mb-3">
+                <h2 className="t-h2">Basic</h2>
+                <span className="pill pill-muted mono">1 KEY</span>
               </div>
-              <p className="text-sm text-gray-300 mb-6">Complete control over every step. Clone your voice, generate avatars, publish directly. Build your personal brand authentically.</p>
-              <ul className="space-y-2 text-sm mb-8">
-                <li className="text-gray-300">✓ 5-step workflow (persona → voice → avatar → content → publish)</li>
-                <li className="text-gray-300">✓ Clone your voice (ElevenLabs)</li>
-                <li className="text-gray-300">✓ Generate avatars (HeyGen)</li>
-                <li className="text-gray-300">✓ Publish to Facebook instantly</li>
-                <li className="text-gray-300">✓ Full analytics & tracking</li>
-                <li className="text-gray-300">✓ Great for: building personal brand, long-term growth</li>
-              </ul>
-              <button onClick={()=>setMode('pro')} className="cyan w-full py-3 rounded-xl font-bold">Build Your Brand →</button>
-              <p className="text-xs text-gray-500 text-center mt-3">Needs: Gemini + ElevenLabs + HeyGen + Meta tokens</p>
+              <p className="t-body mb-6 flex-1">
+                Describe your idea in a paragraph. Get all six pieces back. Best when
+                you want to test an angle before committing to it.
+              </p>
+              <button onClick={()=>setMode('basic')} className="btn btn-primary w-full">
+                Start with a prompt
+              </button>
+              <p className="t-sm mono mt-3">Needs a Gemini key</p>
+            </div>
+
+            <div className="card p-6 flex flex-col">
+              <div className="flex items-center gap-2.5 mb-3">
+                <h2 className="t-h2">Pro</h2>
+                <span className="pill pill-accent mono">4 KEYS</span>
+              </div>
+              <p className="t-body mb-6 flex-1">
+                Five steps: persona, your recorded voice, gestures, avatar video, then
+                content and publishing. Slower to set up, but the output sounds and
+                looks like you.
+              </p>
+              <button onClick={()=>setMode('pro')} className="btn btn-ghost w-full">
+                Set up the full workflow
+              </button>
+              <p className="t-sm mono mt-3">Gemini · ElevenLabs · HeyGen · Meta</p>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Trust Builders */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-orange-400">100%</p>
-            <p className="text-sm text-gray-400">Open source. No lock-in. Built with you, not for you.</p>
+        {/* Honest footer */}
+        <section className="hairline py-16">
+          <p className="t-label mono mb-6">Worth knowing before you start</p>
+          <div className="space-y-4 t-body">
+            <p>
+              <span style={{color:'var(--ink)'}}>Your API keys stay on the server.</span>{' '}
+              They're read from environment variables and never sent to the browser.
+              Every call to Gemini, ElevenLabs, HeyGen, and Meta is billed to your own
+              account at their rates.
+            </p>
+            <p>
+              <span style={{color:'var(--ink)'}}>This app records what you do in it.</span>{' '}
+              Each step logs an event — persona saved, voice cloned, content generated,
+              post published — with a timestamp, so the analytics view can show you your
+              own activity. It's held in server memory and clears on restart. Nothing is
+              sold or sent anywhere else.
+            </p>
+            <p>
+              <span style={{color:'var(--ink)'}}>The Nepali is Romanized, not Devanagari.</span>{' '}
+              It reads naturally in a Facebook feed, but check it before posting — AI
+              translation of Nepali idiom still gets things wrong.
+            </p>
           </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-cyan-400">Bilingual</p>
-            <p className="text-sm text-gray-400">Every piece of content reaches both Nepal & the world.</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-green-400">50+ hrs</p>
-            <p className="text-sm text-gray-400">Saved per month. More time creating, less time tooling.</p>
-          </div>
-        </div>
+        </section>
 
-        {/* Footer CTA */}
-        <div className="text-center py-8 border-t border-gray-700">
-          <p className="text-gray-400 text-sm mb-4">Built by creators, for creators. Built in Hadigaun, Kathmandu. For the world.</p>
-          <p className="text-xs text-gray-500">Your data stays yours. No tracking. No BS.</p>
-        </div>
+        <footer className="hairline py-10">
+          <p className="t-sm mono">Built in Hadigaun, Kathmandu</p>
+        </footer>
       </div>
     </div>
   )
 
   return (
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
-      <header className="glass rounded-2xl p-4 flex justify-between items-center mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <button onClick={()=>setMode(null)} className="text-gray-400 hover:text-white text-xs">← Back</button>
-            <h1 className="text-xl font-bold">SochGuru Creator CMS <span className={mode==='basic' ? 'text-orange-500' : 'text-cyan-500'}>{mode==='basic' ? 'Basic' : 'Pro'}</span></h1>
+      <header className="flex justify-between items-center gap-4 py-5 mb-8 hairline" style={{borderTop:'none', borderBottom:'1px solid var(--line)'}}>
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={()=>setMode(null)} className="t-sm hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold truncate">
+              SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{mode==='basic' ? 'Basic' : 'Pro'}</span>
+            </h1>
           </div>
-          <p className="text-xs text-gray-400">{mode==='basic' ? 'AI-powered content creation' : 'Content Management Tool for Creators'}</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={()=>{setShowAnalytics(!showAnalytics); if(!showAnalytics) fetchAnalytics()}} className="cyan px-4 py-2 rounded-full text-xs font-bold">📊 Analytics</button>
-          <a href="https://vercel.com/new" target="_blank" className="orange px-4 py-2 rounded-full text-xs font-bold">Deploy</a>
-        </div>
+        <button
+          onClick={()=>{setShowAnalytics(!showAnalytics); if(!showAnalytics) fetchAnalytics()}}
+          className="btn btn-ghost shrink-0"
+          style={{padding:'0.5rem 0.875rem', fontSize:'0.8125rem'}}
+        >
+          Activity
+        </button>
       </header>
 
       {mode==='pro' && (
@@ -461,44 +454,81 @@ export default function Page() {
       )}
 
       {mode==='basic' && (
-        <div className="glass rounded-2xl p-6 max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold mb-2">🎯 What's your idea?</h2>
-          <p className="text-sm text-gray-400 mb-4">Describe your content idea, topic, or niche. We'll generate everything: persona, script, avatar prompt, and more.</p>
+        <div className="max-w-2xl mx-auto pb-16">
+          <h2 className="t-h1 mb-3">What are you posting about?</h2>
+          <p className="t-body mb-6">
+            A paragraph is enough — who you are, what you're covering, who reads you.
+            The more specific, the less generic it comes back.
+          </p>
+
           <textarea
             value={basicPrompt}
             onChange={e=>setBasicPrompt(e.target.value)}
-            placeholder="E.g., I'm a data analyst explaining machine learning to beginners. I've worked in tech for 8 years and now I'm building in public in Kathmandu. My audience is both technical and non-technical, English and Nepali speakers."
-            className="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-sm h-32"
+            placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
+            className="field mb-1"
+            style={{height:'9rem', lineHeight:1.6, resize:'vertical'}}
           />
-          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="orange w-full py-3 rounded-xl font-bold disabled:opacity-50">
-            {basicGenerating ? '⏳ Generating your content pack...' : '✨ Generate Content Pack'}
+          <div className="flex justify-end mb-5">
+            <span className="t-sm mono">{basicPrompt.trim().split(/\s+/).filter(Boolean).length} words</span>
+          </div>
+
+          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
+            {basicGenerating ? 'Writing your six pieces…' : 'Generate'}
           </button>
-          {basicError && <p className="text-red-400 text-sm mt-3">{basicError}</p>}
+
+          {basicError && <div className="note note-err mt-4">{basicError}</div>}
+
           {basicResult && (
-            <div className="mt-6 space-y-4">
-              <p className={`text-sm font-bold ${basicResult.source==='gemini' ? 'text-green-400' : 'text-yellow-400'}`}>
-                {basicResult.source==='gemini' ? '✨ Generated by Gemini' : '⚠ Template version'}
-              </p>
-              <div className="bg-black rounded-xl p-4 space-y-3 text-xs">
-                <div>
-                  <p className="text-orange-400 font-bold mb-1">Persona:</p>
-                  <p className="text-gray-300">{basicResult.persona?.name || 'Creator'} • {basicResult.persona?.niche || 'Topic'}</p>
-                  <p className="text-gray-400 text-xs mt-1">{basicResult.persona?.story}</p>
-                </div>
-                <div className="border-t border-gray-700 pt-3">
-                  <p className="text-cyan-400 font-bold mb-1">Content Scripts:</p>
-                  <p className="text-gray-300"><span className="text-orange-400">English:</span> {basicResult.englishStatus}</p>
-                  <p className="text-gray-300 mt-2"><span className="text-orange-400">Nepali:</span> {basicResult.nepaliStatus}</p>
-                </div>
-                <div className="border-t border-gray-700 pt-3">
-                  <p className="text-cyan-400 font-bold mb-1">Avatar Prompt:</p>
-                  <p className="text-gray-300">{basicResult.imagePrompt}</p>
-                </div>
+            <div className="mt-10 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="t-label mono">Draft — review before posting</p>
+                {basicResult.source==='gemini' && <span className="pill pill-accent mono">GEMINI</span>}
               </div>
-              <button onClick={()=>trackAnalytics('basic_pack_exported') || (
-                (blob)=>{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='content-pack.json';a.click()}
-              )(new Blob([JSON.stringify(basicResult, null, 2)], {type:'application/json'}))} className="glass w-full py-2 rounded-xl text-xs">
-                📥 Export Package
+
+              {basicResult.persona && (
+                <div className="card p-5">
+                  <p className="t-label mono mb-3">Persona</p>
+                  <p className="font-medium mb-1.5">
+                    {basicResult.persona.name || 'Creator'}
+                    <span style={{color:'var(--ink-3)'}}> · {basicResult.persona.niche}</span>
+                  </p>
+                  <p className="t-body">{basicResult.persona.story}</p>
+                </div>
+              )}
+
+              {[
+                ['Nepali status', basicResult.nepaliStatus],
+                ['English status', basicResult.englishStatus],
+                ['Nepali video script', basicResult.nepaliVideo],
+                ['English video script', basicResult.englishVideo],
+                ['Image prompt', basicResult.imagePrompt],
+                ['Video prompt', basicResult.veoPrompt]
+              ].filter(([,v]) => v).map(([label, value]) => (
+                <div key={label} className="card p-5">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <p className="t-label mono">{label}</p>
+                    <button
+                      onClick={()=>navigator.clipboard?.writeText(value)}
+                      className="t-sm hover:opacity-70 transition shrink-0"
+                      style={{color:'var(--ink-3)'}}
+                    >Copy</button>
+                  </div>
+                  <p className="t-body whitespace-pre-wrap" style={{color:'var(--ink)'}}>{value}</p>
+                </div>
+              ))}
+
+              <button
+                onClick={()=>{
+                  const blob = new Blob([JSON.stringify(basicResult, null, 2)], {type:'application/json'})
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = 'sochguru-content-pack.json'; a.click()
+                  URL.revokeObjectURL(url)
+                  trackAnalytics('basic_pack_exported')
+                }}
+                className="btn btn-ghost w-full"
+              >
+                Download as JSON
               </button>
             </div>
           )}
