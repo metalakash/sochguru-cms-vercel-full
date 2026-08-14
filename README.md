@@ -1,9 +1,28 @@
-# SochGuru Creator CMS - Content Management Tool for Content Creators
-## Whole Package - Vercel Ready
+# SochGuru Creator CMS - AI-Powered Bilingual Content Creation
+## Two Versions: Basic & Pro
 
-This is the FULL package - Content Management Tool for Creators that collects Voice, Video, Gesture, Persona to build and run content pages. Bilingual Native+Foreign, Avatar-ready, Agent-ready.
+**Basic**: One-prompt generation (Gemini creates everything)  
+**Pro**: Full manual control with AI integrations (voice cloning, avatar generation, publishing)
 
-### Features Included
+Both versions generate bilingual content (English + Nepali) ready for Facebook/Instagram.
+
+### Version Comparison
+
+| Feature | Basic | Pro |
+|---------|-------|-----|
+| **Workflow** | 1 prompt | 5 steps |
+| **Time to content** | 2 minutes | 15 minutes |
+| **Customization** | Limited | Full |
+| **Voice cloning** | ✗ | ✓ |
+| **Avatar generation** | ✗ | ✓ |
+| **Direct publishing** | ✗ | ✓ |
+| **Bilingual content** | ✓ | ✓ |
+| **Analytics** | ✓ | ✓ |
+| **Best for** | Quick wins | Complete control |
+
+---
+
+### Features Included (Pro Version)
 1. **Persona Builder** - Circuit-Brain style: Decade in banking to Agentic AI
 2. **Voice Collection** - For cloning (3 samples: neutral, excited, Nepali)
 3. **Video + Gesture Capture** - 6 gestures: Smile, Pointing, Thinking, Thumbs Up, Explaining, Walking

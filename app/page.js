@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 export default function Page() {
+  const [mode, setMode] = useState(null) // null = selector, 'basic' or 'pro'
   const [step, setStep] = useState(1)
   const [persona, setPersona] = useState({name:'', story:'My decade in banking. Shifting to Agentic AI and culture in Nepal. I don\'t have all the answers. Just sharing as I navigate it all. Let\'s learn and grow together.', niche:'Agentic AI', audience:'Both Bilingual'})
   const [voices, setVoices] = useState([])
@@ -25,6 +26,12 @@ export default function Page() {
   const avatarPollRef = useRef(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [analytics, setAnalytics] = useState(null)
+
+  // Basic mode state
+  const [basicPrompt, setBasicPrompt] = useState('')
+  const [basicGenerating, setBasicGenerating] = useState(false)
+  const [basicResult, setBasicResult] = useState(null)
+  const [basicError, setBasicError] = useState('')
 
   useEffect(()=>{
     const saved = localStorage.getItem('soch_cms_persona')
@@ -133,6 +140,32 @@ export default function Page() {
       setTimeout(()=>{rec.stop(); setRecording(false)}, 5000)
     }catch(err){
       alert('Could not access camera: '+err.message+'. Please allow permission and try again.')
+    }
+  }
+
+  const generateBasicPack = async ()=>{
+    if(!basicPrompt.trim()){
+      setBasicError('Please enter a content idea or topic')
+      return
+    }
+    setBasicGenerating(true)
+    setBasicError('')
+    setBasicResult(null)
+    try{
+      const res = await fetch('/api/generate-basic-pack', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt: basicPrompt})
+      })
+      if(!res.ok) throw new Error('Server returned '+res.status)
+      const data = await res.json()
+      setBasicResult(data)
+      trackAnalytics('basic_pack_generated', {source: data.source})
+    }catch(err){
+      setBasicError('Generation failed: '+err.message)
+      trackAnalytics('basic_pack_generated', {status: 'error', error: err.message})
+    }finally{
+      setBasicGenerating(false)
     }
   }
 
@@ -252,28 +285,119 @@ export default function Page() {
     const a = document.createElement('a'); a.href=url; a.download='SochGuru_CreatorPackage.json'; a.click()
   }
 
+  if(!mode) return (
+    <div className="min-h-screen p-4 max-w-6xl mx-auto flex flex-col">
+      <header className="glass rounded-2xl p-4 flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">SochGuru Creator CMS</h1>
+          <p className="text-xs text-gray-400">Choose your workflow</p>
+        </div>
+      </header>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="grid md:grid-cols-2 gap-6 w-full max-w-2xl">
+          <div className="glass rounded-2xl p-8 flex flex-col justify-between h-full">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">🚀 Basic</h2>
+              <p className="text-sm text-gray-300 mb-4">One prompt to everything</p>
+              <ul className="text-xs space-y-1 text-gray-400">
+                <li>✓ Just describe your idea</li>
+                <li>✓ Gemini generates it all</li>
+                <li>✓ Ready to post in minutes</li>
+                <li>✓ Perfect for quick wins</li>
+              </ul>
+            </div>
+            <button onClick={()=>setMode('basic')} className="orange w-full mt-6 py-3 rounded-xl font-bold">Start Basic →</button>
+          </div>
+          <div className="glass rounded-2xl p-8 flex flex-col justify-between h-full border border-cyan-500">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">⚡ Pro</h2>
+              <p className="text-sm text-cyan-400 mb-4">Full creator control</p>
+              <ul className="text-xs space-y-1 text-gray-400">
+                <li>✓ 5-step workflow</li>
+                <li>✓ Clone your voice</li>
+                <li>✓ Generate avatars</li>
+                <li>✓ Full customization</li>
+              </ul>
+            </div>
+            <button onClick={()=>setMode('pro')} className="cyan w-full mt-6 py-3 rounded-xl font-bold">Start Pro →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
       <header className="glass rounded-2xl p-4 flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-xl font-bold">SochGuru Creator CMS <span className="text-orange-500">Vercel Ready</span></h1>
-          <p className="text-xs text-gray-400">Content Management Tool for Creators • Voice • Video • Gesture • Persona • Avatar • Bilingual • Meta Data • Agent Ready</p>
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setMode(null)} className="text-gray-400 hover:text-white text-xs">← Back</button>
+            <h1 className="text-xl font-bold">SochGuru Creator CMS <span className={mode==='basic' ? 'text-orange-500' : 'text-cyan-500'}>{mode==='basic' ? 'Basic' : 'Pro'}</span></h1>
+          </div>
+          <p className="text-xs text-gray-400">{mode==='basic' ? 'AI-powered content creation' : 'Content Management Tool for Creators'}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={()=>{setShowAnalytics(!showAnalytics); if(!showAnalytics) fetchAnalytics()}} className="cyan px-4 py-2 rounded-full text-xs font-bold">📊 Analytics</button>
-          <a href="https://vercel.com/new" target="_blank" className="orange px-4 py-2 rounded-full text-xs font-bold">Deploy to Vercel</a>
+          <a href="https://vercel.com/new" target="_blank" className="orange px-4 py-2 rounded-full text-xs font-bold">Deploy</a>
         </div>
       </header>
 
-      <div className="grid grid-cols-5 gap-2 mb-6">
-        {[1,2,3,4,5].map(n=>(
-          <button key={n} onClick={()=>setStep(n)} className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}>
-            {n===1?'1 Persona': n===2?'2 Voice': n===3?'3 Video+Gesture': n===4?'4 Avatar': '5 Content & Publish'}
-          </button>
-        ))}
-      </div>
+      {mode==='pro' && (
+        <div className="grid grid-cols-5 gap-2 mb-6">
+          {[1,2,3,4,5].map(n=>(
+            <button key={n} onClick={()=>setStep(n)} className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}>
+              {n===1?'1 Persona': n===2?'2 Voice': n===3?'3 Video+Gesture': n===4?'4 Avatar': '5 Content & Publish'}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {step===1 && (
+      {mode==='basic' && (
+        <div className="glass rounded-2xl p-6 max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold mb-2">🎯 What's your idea?</h2>
+          <p className="text-sm text-gray-400 mb-4">Describe your content idea, topic, or niche. We'll generate everything: persona, script, avatar prompt, and more.</p>
+          <textarea
+            value={basicPrompt}
+            onChange={e=>setBasicPrompt(e.target.value)}
+            placeholder="E.g., I'm a data analyst explaining machine learning to beginners. I've worked in tech for 8 years and now I'm building in public in Kathmandu. My audience is both technical and non-technical, English and Nepali speakers."
+            className="w-full bg-black border border-gray-700 rounded-xl p-4 mb-4 text-sm h-32"
+          />
+          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="orange w-full py-3 rounded-xl font-bold disabled:opacity-50">
+            {basicGenerating ? '⏳ Generating your content pack...' : '✨ Generate Content Pack'}
+          </button>
+          {basicError && <p className="text-red-400 text-sm mt-3">{basicError}</p>}
+          {basicResult && (
+            <div className="mt-6 space-y-4">
+              <p className={`text-sm font-bold ${basicResult.source==='gemini' ? 'text-green-400' : 'text-yellow-400'}`}>
+                {basicResult.source==='gemini' ? '✨ Generated by Gemini' : '⚠ Template version'}
+              </p>
+              <div className="bg-black rounded-xl p-4 space-y-3 text-xs">
+                <div>
+                  <p className="text-orange-400 font-bold mb-1">Persona:</p>
+                  <p className="text-gray-300">{basicResult.persona?.name || 'Creator'} • {basicResult.persona?.niche || 'Topic'}</p>
+                  <p className="text-gray-400 text-xs mt-1">{basicResult.persona?.story}</p>
+                </div>
+                <div className="border-t border-gray-700 pt-3">
+                  <p className="text-cyan-400 font-bold mb-1">Content Scripts:</p>
+                  <p className="text-gray-300"><span className="text-orange-400">English:</span> {basicResult.englishStatus}</p>
+                  <p className="text-gray-300 mt-2"><span className="text-orange-400">Nepali:</span> {basicResult.nepaliStatus}</p>
+                </div>
+                <div className="border-t border-gray-700 pt-3">
+                  <p className="text-cyan-400 font-bold mb-1">Avatar Prompt:</p>
+                  <p className="text-gray-300">{basicResult.imagePrompt}</p>
+                </div>
+              </div>
+              <button onClick={()=>trackAnalytics('basic_pack_exported') || (
+                (blob)=>{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='content-pack.json';a.click()}
+              )(new Blob([JSON.stringify(basicResult, null, 2)], {type:'application/json'}))} className="glass w-full py-2 rounded-xl text-xs">
+                📥 Export Package
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode==='pro' && step===1 && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="glass rounded-2xl p-5">
             <h2 className="font-bold mb-3">Step 1: Persona Builder</h2>
@@ -297,7 +421,7 @@ export default function Page() {
         </div>
       )}
 
-      {step===2 && (
+      {mode==='pro' && step===2 && (
         <div className="glass rounded-2xl p-5">
           <h2 className="font-bold mb-3">Step 2: Voice Collection for Cloning {recording && <span className="text-red-400">● Recording 5s</span>}</h2>
           <div className="grid md:grid-cols-3 gap-3">
@@ -322,7 +446,7 @@ export default function Page() {
         </div>
       )}
 
-      {step===3 && (
+      {mode==='pro' && step===3 && (
         <div className="glass rounded-2xl p-5">
           <h2 className="font-bold mb-3">Step 3: Video + Gesture Capture {recording && <span className="text-red-400">● Recording</span>}</h2>
           <video ref={previewRef} autoPlay muted playsInline className="w-full h-48 bg-black rounded object-cover mb-3"/>
@@ -335,7 +459,7 @@ export default function Page() {
         </div>
       )}
 
-      {step===4 && (
+      {mode==='pro' && step===4 && (
         <div className="glass rounded-2xl p-5">
           <h2 className="font-bold mb-3">Step 4: Avatar Builder - Circuit-Brain</h2>
           <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -363,7 +487,7 @@ export default function Page() {
         </div>
       )}
 
-      {step===5 && (
+      {mode==='pro' && step===5 && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="glass rounded-2xl p-5">
             <h2 className="font-bold mb-3">Step 5: Content Management Tool</h2>
@@ -407,7 +531,7 @@ export default function Page() {
         </div>
       )}
 
-      {showAnalytics && (
+      {showAnalytics && mode && (
         <div className="glass rounded-2xl p-5 mt-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-bold">📊 Analytics Dashboard</h2>
