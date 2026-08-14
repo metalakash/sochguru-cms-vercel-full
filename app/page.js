@@ -15,6 +15,9 @@ export default function Page() {
   const [publishing, setPublishing] = useState(false)
   const [pubError, setPubError] = useState('')
   const [pubResult, setPubResult] = useState(null)
+  const [cloning, setCloning] = useState(false)
+  const [cloneError, setCloneError] = useState('')
+  const [cloneResult, setCloneResult] = useState(null)
 
   useEffect(()=>{
     const saved = localStorage.getItem('soch_cms_persona')
@@ -93,6 +96,34 @@ export default function Page() {
       setGenError('Could not generate content: '+err.message)
     }finally{
       setGenerating(false)
+    }
+  }
+
+  const cloneVoices = async ()=>{
+    if(voices.length === 0) {
+      setCloneError('Record at least one voice sample first')
+      return
+    }
+    setCloning(true)
+    setCloneError('')
+    setCloneResult(null)
+    try{
+      const voiceSamples = await Promise.all(voices.map(async (v)=>{
+        const buf = await v.blob.arrayBuffer()
+        return {type: v.type, data: Buffer.from(buf).toString('base64')}
+      }))
+      const res = await fetch('/api/clone-voice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({voiceSamples, creatorName: persona.name || 'SochGuru'})
+      })
+      if(!res.ok) throw new Error('Server returned '+res.status)
+      const data = await res.json()
+      setCloneResult(data)
+    }catch(err){
+      setCloneError('Voice cloning failed: '+err.message)
+    }finally{
+      setCloning(false)
     }
   }
 
@@ -175,6 +206,18 @@ export default function Page() {
             <div className="bg-black rounded p-3"><p className="text-xs text-cyan-400">Nepali: Soch yesto cha...</p><button onClick={()=>recordVoice('nepali')} className="orange w-full mt-2 py-1 rounded text-xs">● Record 5s</button></div>
           </div>
           <div className="mt-3 flex gap-2 flex-wrap">{voices.map((v,i)=><audio key={i} src={v.url} controls className="w-48 h-8"/>)}<span className="text-xs text-gray-400">{voices.length} voice samples</span></div>
+          {voices.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <button onClick={cloneVoices} disabled={cloning} className="orange w-full py-2 rounded-xl font-bold text-xs disabled:opacity-50">{cloning ? 'Cloning…' : '🎤 Clone Voices with ElevenLabs'}</button>
+              {cloneError && <p className="text-red-400 text-xs">{cloneError}</p>}
+              {cloneResult && (
+                <div className={`rounded p-2 text-xs ${cloneResult.status==='success' ? 'bg-green-900 text-green-100' : 'bg-yellow-900 text-yellow-100'}`}>
+                  <p className="font-bold">{cloneResult.status==='success' ? '✓ Cloned!' : '⚠ Partial clone'}</p>
+                  {cloneResult.results?.map((r, i)=><p key={i}>{r.type}: {r.status} {r.voiceId && `(ID: ${r.voiceId})`} {r.error && `— ${r.error}`}</p>)}
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={()=>setStep(3)} className="orange w-full mt-4 py-2 rounded-xl font-bold">Save Voice → Video</button>
         </div>
       )}

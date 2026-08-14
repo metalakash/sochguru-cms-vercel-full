@@ -46,12 +46,22 @@ git push -u origin main
 3. Import GitHub repo `sochguru-cms`
 4. Framework Preset: Next.js
 5. Environment Variables (Project Settings → Environment Variables, not `.env` in the repo):
-   - `GEMINI_API_KEY` = your Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (server-only — powers `/api/generate-content`; without it, content generation falls back to a local template)
-   - `GEMINI_MODEL` = optional, defaults to `gemini-2.5-flash`
-   - `META_ACCESS_TOKEN` = a long-lived Facebook Page access token (server-only — powers `/api/publish`). Get one via:
-     - Go to [developers.facebook.com](https://developers.facebook.com) → Your App → Settings → Basic, grab your App ID & Secret
-     - Use Graph API Explorer or Postman to POST to `/oauth/access_token` with your credentials to get a user token, then extend it to a page token
-     - Or: go to your Page → Settings → Roles → click "Generate Token" under Page Access Tokens (simpler, but tokens expire in 60 days)
+   
+   - **`GEMINI_API_KEY`** = API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+     - Powers `/api/generate-content` for bilingual content writing
+     - Without it: falls back to template
+   
+   - **`ELEVENLABS_API_KEY`** = API key from [elevenlabs.io](https://elevenlabs.io)
+     - Sign up → Account → API Keys → copy your key
+     - Free tier includes 10,000 characters/month
+     - Powers `/api/clone-voice` for voice cloning (Step 2)
+   
+   - **`META_ACCESS_TOKEN`** = long-lived Facebook Page token
+     - Easiest: Page → Settings → Roles → "Generate Token" under Page Access Tokens
+     - These expire in 60 days; for permanent: use Graph API to extend user token to page token
+     - Powers `/api/publish` to post to Facebook
+   
+   - **`GEMINI_MODEL`** = optional, defaults to `gemini-2.5-flash`
 6. Deploy → You get URL: https://sochguru-cms.vercel.app
 7. Open on phone → Add to Home Screen → You have native app
 
@@ -68,6 +78,12 @@ vercel
 - Calls Gemini API with structured JSON schema (if `GEMINI_API_KEY` is set)
 - Falls back to local template if key is missing or call fails
 - Persona-aware: uses name, story, niche, audience to write bilingual content
+
+**Voice Cloning (`/api/clone-voice`)**
+- Uploads voice samples to ElevenLabs for voice cloning
+- Creates a reusable voice profile (voice ID) from 3+ seconds of audio
+- Records Neutral, Excited, and Nepali tone variants
+- Requires `ELEVENLABS_API_KEY` (free tier available at elevenlabs.io)
 
 **Publishing (`/api/publish`)**
 - Posts bilingual statuses (Nepali + English) to Meta/Facebook page
