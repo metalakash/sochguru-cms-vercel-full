@@ -398,51 +398,158 @@ export default function Page() {
       )}
 
       {mode==='pro' && step===1 && (
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="glass rounded-2xl p-5">
-            <h2 className="font-bold mb-3">Step 1: Persona Builder</h2>
-            <input value={persona.name} onChange={e=>setPersona({...persona, name:e.target.value})} placeholder="Creator Name" className="w-full bg-black border border-gray-700 rounded p-2 mb-2 text-sm"/>
-            <textarea value={persona.story} onChange={e=>setPersona({...persona, story:e.target.value})} className="w-full bg-black border border-gray-700 rounded p-2 mb-2 text-sm h-28" placeholder="My decade in banking..."/>
-            <div className="grid grid-cols-2 gap-2">
-              <select value={persona.niche} onChange={e=>setPersona({...persona, niche:e.target.value})} className="bg-black border border-gray-700 rounded p-2 text-sm"><option>Agentic AI</option><option>Mindset</option><option>Culture Nepal</option><option>Business</option><option>Tech</option></select>
-              <select value={persona.audience} onChange={e=>setPersona({...persona, audience:e.target.value})} className="bg-black border border-gray-700 rounded p-2 text-sm"><option>Both Bilingual (Native+Foreign)</option><option>Native Nepali</option><option>Foreign Global</option></select>
+        <div className="space-y-6 max-w-4xl mx-auto">
+          <div className="glass rounded-2xl p-6">
+            <h2 className="text-2xl font-bold mb-2">✨ Define Your Creator Persona</h2>
+            <p className="text-sm text-gray-400 mb-6">This becomes your unique voice across all content. We'll use this to tailor everything: scripts, tone, avatar, and messaging.</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-gray-300 block mb-2">Your Name</label>
+                <input
+                  value={persona.name}
+                  onChange={e=>setPersona({...persona, name:e.target.value})}
+                  placeholder="e.g., Akash Rai"
+                  className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-300 block mb-2">Your Story (30 seconds to read)</label>
+                <textarea
+                  value={persona.story}
+                  onChange={e=>setPersona({...persona, story:e.target.value})}
+                  placeholder="Share your background, journey, and what drives you. Be authentic..."
+                  className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm h-24 focus:border-orange-500 outline-none transition"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-300 block mb-2">Niche / Topic</label>
+                  <select
+                    value={persona.niche}
+                    onChange={e=>setPersona({...persona, niche:e.target.value})}
+                    className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
+                  >
+                    <option>Agentic AI</option>
+                    <option>Mindset</option>
+                    <option>Culture Nepal</option>
+                    <option>Business</option>
+                    <option>Tech</option>
+                    <option>Design</option>
+                    <option>Marketing</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-300 block mb-2">Your Audience</label>
+                  <select
+                    value={persona.audience}
+                    onChange={e=>setPersona({...persona, audience:e.target.value})}
+                    className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
+                  >
+                    <option>Both Bilingual (Native+Foreign)</option>
+                    <option>Native Nepali</option>
+                    <option>Foreign Global</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <button onClick={savePersona} className="orange w-full mt-4 py-2 rounded-xl font-bold">Save Persona →</button>
+
+            <div className="mt-6 bg-black rounded-lg p-4 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-3">💡 How this is used:</p>
+              <ul className="space-y-2 text-xs text-gray-300">
+                <li>✓ Voice Clone Agent learns your unique tone & delivery</li>
+                <li>✓ Content Agent writes from your perspective</li>
+                <li>✓ Avatar Agent creates videos that look like you</li>
+              </ul>
+            </div>
           </div>
-          <div className="glass rounded-2xl p-5">
-            <h3 className="text-xs text-gray-400 mb-2">Meta Data + Agent Ready</h3>
-            <p className="text-xs mb-2">Persona becomes knowledge graph for future agents. This is Layer 2 of your agent architecture.</p>
-            <div className="bg-black rounded p-3 text-xs">
-              <p>• Voice Clone Agent will use this persona for tone</p>
-              <p>• Bilingual Copywriter Agent uses niche + audience</p>
-              <p>• Avatar Agent uses story for scenes</p>
-            </div>
+
+          <div className="flex gap-3">
+            <button onClick={()=>setMode(null)} className="glass flex-1 py-3 rounded-xl font-bold">← Back to Modes</button>
+            <button onClick={savePersona} className="orange flex-1 py-3 rounded-xl font-bold">Continue to Voice →</button>
           </div>
         </div>
       )}
 
       {mode==='pro' && step===2 && (
-        <div className="glass rounded-2xl p-5">
-          <h2 className="font-bold mb-3">Step 2: Voice Collection for Cloning {recording && <span className="text-red-400">● Recording 5s</span>}</h2>
-          <div className="grid md:grid-cols-3 gap-3">
-            <div className="bg-black rounded p-3"><p className="text-xs text-cyan-400">Neutral: My decade in banking...</p><button onClick={()=>recordVoice('neutral')} className="orange w-full mt-2 py-1 rounded text-xs">● Record 5s</button></div>
-            <div className="bg-black rounded p-3"><p className="text-xs text-cyan-400">Excited: Let's learn & grow together!</p><button onClick={()=>recordVoice('excited')} className="orange w-full mt-2 py-1 rounded text-xs">● Record 5s</button></div>
-            <div className="bg-black rounded p-3"><p className="text-xs text-cyan-400">Nepali: Soch yesto cha...</p><button onClick={()=>recordVoice('nepali')} className="orange w-full mt-2 py-1 rounded text-xs">● Record 5s</button></div>
-          </div>
-          <div className="mt-3 flex gap-2 flex-wrap">{voices.map((v,i)=><audio key={i} src={v.url} controls className="w-48 h-8"/>)}<span className="text-xs text-gray-400">{voices.length} voice samples</span></div>
-          {voices.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <button onClick={cloneVoices} disabled={cloning} className="orange w-full py-2 rounded-xl font-bold text-xs disabled:opacity-50">{cloning ? 'Cloning…' : '🎤 Clone Voices with ElevenLabs'}</button>
-              {cloneError && <p className="text-red-400 text-xs">{cloneError}</p>}
-              {cloneResult && (
-                <div className={`rounded p-2 text-xs ${cloneResult.status==='success' ? 'bg-green-900 text-green-100' : 'bg-yellow-900 text-yellow-100'}`}>
-                  <p className="font-bold">{cloneResult.status==='success' ? '✓ Cloned!' : '⚠ Partial clone'}</p>
-                  {cloneResult.results?.map((r, i)=><p key={i}>{r.type}: {r.status} {r.voiceId && `(ID: ${r.voiceId})`} {r.error && `— ${r.error}`}</p>)}
-                </div>
-              )}
+        <div className="space-y-6 max-w-4xl mx-auto">
+          <div className="glass rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <h2 className="text-2xl font-bold flex-1">🎤 Record Your Voice</h2>
+              <span className="text-xs bg-orange-900 text-orange-100 px-3 py-1 rounded-full">{voices.length}/3 recorded</span>
             </div>
-          )}
-          <button onClick={()=>setStep(3)} className="orange w-full mt-4 py-2 rounded-xl font-bold">Save Voice → Video</button>
+            <p className="text-sm text-gray-400 mb-6">Record 3 voice samples in different tones. We'll clone your voice for all future videos.</p>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                {type: 'neutral', label: 'Neutral Tone', hint: 'Speak naturally, explain something', example: 'My decade in banking taught me...'},
+                {type: 'excited', label: 'Excited Tone', hint: 'Show enthusiasm and energy', example: 'Let\'s learn & grow together!'},
+                {type: 'nepali', label: 'Nepali Tone', hint: 'Natural Nepali (Romanized ok)', example: 'Soch yesto cha...'}
+              ].map(({type, label, hint, example}) => {
+                const recorded = voices.find(v => v.type === type)
+                return (
+                  <div key={type} className={`rounded-xl p-4 transition ${recording ? 'bg-gray-900' : 'bg-black border border-gray-700 hover:border-orange-500'}`}>
+                    <p className="font-bold text-sm mb-1">{label}</p>
+                    <p className="text-xs text-gray-500 mb-3">{hint}</p>
+                    <p className="text-xs text-cyan-400 italic mb-3 line-clamp-2">"{example}"</p>
+
+                    <button
+                      onClick={()=>recordVoice(type)}
+                      disabled={recording}
+                      className="orange w-full py-2 rounded-lg font-bold text-sm mb-2 disabled:opacity-50 transition hover:opacity-90"
+                    >
+                      {recording ? '● Recording 5s...' : recorded ? '✓ Re-record' : '● Record 5s'}
+                    </button>
+
+                    {recorded && (
+                      <div className="bg-green-900 bg-opacity-20 border border-green-700 rounded-lg p-2">
+                        <audio src={recorded.url} controls className="w-full h-7 text-xs"/>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {voices.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <div className="bg-black rounded-lg p-4 border border-gray-700">
+                  <p className="text-sm font-bold mb-2">📋 Summary</p>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    {['neutral', 'excited', 'nepali'].map(type => {
+                      const has = voices.find(v => v.type === type)
+                      return <div key={type} className={`p-2 rounded text-center ${has ? 'bg-green-900 text-green-100' : 'bg-gray-800 text-gray-400'}`}>{type.charAt(0).toUpperCase() + type.slice(1)} {has ? '✓' : '○'}</div>
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  onClick={cloneVoices}
+                  disabled={cloning || voices.length < 3}
+                  className="orange w-full py-3 rounded-xl font-bold disabled:opacity-50 transition"
+                >
+                  {cloning ? '⏳ Cloning your voice...' : '🎤 Clone Voices with ElevenLabs'}
+                </button>
+
+                {cloneError && <p className="text-red-400 text-sm p-3 bg-red-900 bg-opacity-20 rounded-lg">{cloneError}</p>}
+
+                {cloneResult && (
+                  <div className={`rounded-lg p-4 text-sm ${cloneResult.status==='success' ? 'bg-green-900 bg-opacity-20 border border-green-700 text-green-100' : 'bg-yellow-900 bg-opacity-20 border border-yellow-700 text-yellow-100'}`}>
+                    <p className="font-bold mb-2">{cloneResult.status==='success' ? '✓ Voice Cloned Successfully!' : '⚠ Partial Clone'}</p>
+                    {cloneResult.results?.map((r, i)=><p key={i} className="text-xs">{r.type}: {r.status} {r.voiceId && `→ Ready`}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(1)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
+            <button onClick={()=>setStep(3)} className="orange flex-1 py-3 rounded-xl font-bold" disabled={voices.length < 3}>Next: Video & Gesture →</button>
+          </div>
         </div>
       )}
 
