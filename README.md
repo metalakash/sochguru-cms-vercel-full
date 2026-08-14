@@ -102,11 +102,22 @@ vercel
 - Requires `META_ACCESS_TOKEN` (long-lived page/Instagram token)
 - Shows publish status inline (success, partial, or error details)
 
-### Remaining Agent-Ready Architecture (Future)
-These routes are ready for agent integration:
-- `/api/analytics` -> Analytics Agent (track views, engagement, conversion)
+**Analytics (`/api/analytics`)**
+- Tracks all creator actions: persona creation, voice cloning, avatar generation, content generation, publishing
+- Calculates success rates, event counts, and performance metrics
+- Dashboard accessible via "📊 Analytics" button in header
+- In-memory store (reset on server restart; for production, integrate with database)
 
-Full event flow: CreatorCreated → VoiceCloned → AvatarReady → ContentGenerated → Published → AnalyticsUpdated
+### Event Flow & Analytics
+
+Full creator pipeline with automatic event tracking:
+```
+CreatorCreated → VoiceCloned → AvatarReady → ContentGenerated → Published
+                                                                      ↓
+                                                            Analytics Dashboard
+```
+
+All events are tracked in real-time and accessible via the "📊 Analytics" button in the header. Success rates, error counts, and performance metrics are displayed with recent event logs.
 
 ### What You Get After Deploy
 - Live CMS at your Vercel URL

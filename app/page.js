@@ -23,6 +23,8 @@ export default function Page() {
   const [avatarResult, setAvatarResult] = useState(null)
   const [avatarJobId, setAvatarJobId] = useState('')
   const avatarPollRef = useRef(null)
+  const [showAnalytics, setShowAnalytics] = useState(false)
+  const [analytics, setAnalytics] = useState(null)
 
   useEffect(()=>{
     const saved = localStorage.getItem('soch_cms_persona')
@@ -46,6 +48,7 @@ export default function Page() {
           setAvatarResult(data)
           setAvatarJobId('')
           if(avatarPollRef.current) clearInterval(avatarPollRef.current)
+          trackAnalytics('avatar_generated', {status: 'success'})
         }
       }catch(err){
         console.error('Avatar status check failed:', err)
@@ -55,8 +58,31 @@ export default function Page() {
     return ()=>clearInterval(poll)
   }, [avatarJobId])
 
+  const trackAnalytics = async (type, data = {})=>{
+    try{
+      await fetch('/api/analytics', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'track', event: {type, ...data}})
+      })
+    }catch(err){
+      console.error('Analytics tracking failed:', err)
+    }
+  }
+
+  const fetchAnalytics = async ()=>{
+    try{
+      const res = await fetch('/api/analytics?action=report')
+      const data = await res.json()
+      setAnalytics(data)
+    }catch(err){
+      console.error('Failed to fetch analytics:', err)
+    }
+  }
+
   const savePersona = ()=>{
     localStorage.setItem('soch_cms_persona', JSON.stringify(persona))
+    trackAnalytics('creator_created', {name: persona.name, niche: persona.niche})
     setStep(2)
   }
 
@@ -123,8 +149,10 @@ export default function Page() {
       const data = await res.json()
       setContent(data)
       localStorage.setItem('soch_last_content', JSON.stringify(data))
+      trackAnalytics('content_generated', {source: data.source})
     }catch(err){
       setGenError('Could not generate content: '+err.message)
+      trackAnalytics('content_generated', {status: 'error', error: err.message})
     }finally{
       setGenerating(false)
     }
@@ -181,8 +209,14 @@ export default function Page() {
       if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
       setCloneResult(data)
+      if(data.status === 'success'){
+        trackAnalytics('voice_cloned', {voiceCount: voices.length, status: 'success'})
+      }else{
+        trackAnalytics('voice_cloned', {voiceCount: voices.length, status: 'partial', errors: data.results.filter(r=>r.status==='failed').length})
+      }
     }catch(err){
       setCloneError('Voice cloning failed: '+err.message)
+      trackAnalytics('voice_cloned', {status: 'error', error: err.message})
     }finally{
       setCloning(false)
     }
@@ -202,8 +236,10 @@ export default function Page() {
       if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
       setPubResult(data)
+      trackAnalytics('published', {status: data.status, postsCount: data.results?.length})
     }catch(err){
       setPubError('Publish failed: '+err.message)
+      trackAnalytics('published', {status: 'error', error: err.message})
     }finally{
       setPublishing(false)
     }
@@ -223,7 +259,10 @@ export default function Page() {
           <h1 className="text-xl font-bold">SochGuru Creator CMS <span className="text-orange-500">Vercel Ready</span></h1>
           <p className="text-xs text-gray-400">Content Management Tool for Creators • Voice • Video • Gesture • Persona • Avatar • Bilingual • Meta Data • Agent Ready</p>
         </div>
-        <a href="https://vercel.com/new" target="_blank" className="orange px-4 py-2 rounded-full text-xs font-bold">Deploy to Vercel</a>
+        <div className="flex gap-2">
+          <button onClick={()=>{setShowAnalytics(!showAnalytics); if(!showAnalytics) fetchAnalytics()}} className="cyan px-4 py-2 rounded-full text-xs font-bold">📊 Analytics</button>
+          <a href="https://vercel.com/new" target="_blank" className="orange px-4 py-2 rounded-full text-xs font-bold">Deploy to Vercel</a>
+        </div>
       </header>
 
       <div className="grid grid-cols-5 gap-2 mb-6">
@@ -365,6 +404,48 @@ export default function Page() {
             <button onClick={exportPackage} className="glass w-full mt-3 py-2 rounded-xl text-xs">Export Creator Package JSON</button>
             <a href="https://vercel.com/new" target="_blank" className="orange block text-center w-full mt-2 py-2 rounded-xl font-bold text-xs">Deploy to Vercel Now →</a>
           </div>
+        </div>
+      )}
+
+      {showAnalytics && (
+        <div className="glass rounded-2xl p-5 mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="font-bold">📊 Analytics Dashboard</h2>
+            <button onClick={()=>setShowAnalytics(false)} className="text-gray-400 text-xs">✕ Close</button>
+          </div>
+          {!analytics ? (
+            <p className="text-xs text-gray-400">Loading analytics...</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Total Events</p><p className="text-xl font-bold text-orange-400">{analytics.summary.totalEvents}</p></div>
+                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Success Rate</p><p className="text-xl font-bold text-green-400">{analytics.summary.successRate}%</p></div>
+                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Creators</p><p className="text-xl font-bold">{analytics.summary.creators}</p></div>
+                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Published</p><p className="text-xl font-bold text-cyan-400">{analytics.summary.published}</p></div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                <div className="bg-black rounded p-2"><p className="text-gray-400">Voice Clones</p><p className="text-lg font-bold">{analytics.summary.voiceClones}</p></div>
+                <div className="bg-black rounded p-2"><p className="text-gray-400">Avatars</p><p className="text-lg font-bold">{analytics.summary.avatarsGenerated}</p></div>
+                <div className="bg-black rounded p-2"><p className="text-gray-400">Content</p><p className="text-lg font-bold">{analytics.summary.contentGenerated}</p></div>
+                <div className="bg-black rounded p-2"><p className="text-gray-400">Errors</p><p className="text-lg font-bold text-red-400">{analytics.summary.errors}</p></div>
+                <div className="bg-black rounded p-2"><p className="text-gray-400">Avg Gen Time</p><p className="text-lg font-bold">{analytics.avgGenerationTime}ms</p></div>
+              </div>
+              {analytics.recentEvents.length > 0 && (
+                <div className="bg-black rounded p-3">
+                  <p className="text-xs font-bold mb-2">Recent Events</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
+                    {analytics.recentEvents.map((e, i)=>(
+                      <div key={i} className={`p-1 rounded flex justify-between ${e.status==='error' ? 'bg-red-900' : e.status==='success' ? 'bg-green-900' : 'bg-gray-800'}`}>
+                        <span>{e.type}</span>
+                        <span className="text-gray-400">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={async ()=>{await fetch('/api/analytics?action=clear'); setAnalytics(null)}} className="glass w-full py-1 rounded text-xs">Clear Analytics</button>
+            </div>
+          )}
         </div>
       )}
     </div>
