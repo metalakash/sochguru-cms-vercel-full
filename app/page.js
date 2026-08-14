@@ -286,41 +286,149 @@ export default function Page() {
   }
 
   if(!mode) return (
-    <div className="min-h-screen p-4 max-w-6xl mx-auto flex flex-col">
-      <header className="glass rounded-2xl p-4 flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">SochGuru Creator CMS</h1>
-          <p className="text-xs text-gray-400">Choose your workflow</p>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black p-4">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="text-center py-12">
+          <p className="text-orange-400 text-sm font-bold mb-2">🇳🇵 BUILT IN KATHMANDU • FOR CREATORS WORLDWIDE</p>
+          <h1 className="text-5xl font-bold mb-4">SochGuru</h1>
+          <p className="text-xl text-gray-300 mb-2">Turn Your Ideas Into Bilingual Content in Minutes</p>
+          <p className="text-gray-400 max-w-2xl mx-auto">AI-powered content creation for creators who want to reach both their native culture AND the global audience. No more choosing between English or Nepali. Go bilingual. Go viral. Go big.</p>
         </div>
-      </header>
-      <div className="flex-1 flex items-center justify-center">
-        <div className="grid md:grid-cols-2 gap-6 w-full max-w-2xl">
-          <div className="glass rounded-2xl p-8 flex flex-col justify-between h-full">
+
+        {/* The Problem & Solution */}
+        <div className="grid md:grid-cols-3 gap-6 my-16">
+          <div className="glass rounded-2xl p-6 text-center">
+            <p className="text-3xl mb-3">⏱️</p>
+            <h3 className="font-bold mb-2">The Time Drain</h3>
+            <p className="text-sm text-gray-400">Creating content for 2 languages takes 2x the time. Persona building, voice work, video editing... it's endless.</p>
+          </div>
+          <div className="glass rounded-2xl p-6 text-center">
+            <p className="text-3xl mb-3">🎯</p>
+            <h3 className="font-bold mb-2">Split Audience</h3>
+            <p className="text-sm text-gray-400">Choose English for global reach OR Nepali for home. Why choose? Nepal's best creators go global AND stay rooted.</p>
+          </div>
+          <div className="glass rounded-2xl p-6 text-center border-2 border-orange-500">
+            <p className="text-3xl mb-3">✨</p>
+            <h3 className="font-bold mb-2 text-orange-400">The SochGuru Way</h3>
+            <p className="text-sm text-gray-300"><strong>One prompt.</strong> Bilingual scripts. Avatar videos. Ready to post. 2 minutes.</p>
+          </div>
+        </div>
+
+        {/* Who This Is For */}
+        <div className="glass rounded-2xl p-8 mb-16">
+          <h2 className="text-2xl font-bold mb-6 text-center">This is for creators who:</h2>
+          <div className="grid md:grid-cols-2 gap-6 text-sm">
+            <div><p className="text-orange-400">✓</p> Have something important to say but not enough time to make content</div>
+            <div><p className="text-orange-400">✓</p> Want to reach both Nepal AND the world</div>
+            <div><p className="text-orange-400">✓</p> Are tired of fragmented workflows (recording voice, making avatars, writing scripts separately)</div>
+            <div><p className="text-orange-400">✓</p> Want their authentic voice (literally & figuratively) in every video</div>
+            <div><p className="text-orange-400">✓</p> Are building in public and need to move fast</div>
+            <div><p className="text-orange-400">✓</p> Believe Nepal's stories deserve a global platform</div>
+          </div>
+        </div>
+
+        {/* Real Use Case */}
+        <div className="glass rounded-2xl p-8 mb-16 border border-cyan-500">
+          <h3 className="font-bold mb-4">Real Example: Akash's Week</h3>
+          <div className="grid md:grid-cols-2 gap-8">
             <div>
-              <h2 className="text-2xl font-bold mb-2">🚀 Basic</h2>
-              <p className="text-sm text-gray-300 mb-4">One prompt to everything</p>
-              <ul className="text-xs space-y-1 text-gray-400">
-                <li>✓ Just describe your idea</li>
-                <li>✓ Gemini generates it all</li>
-                <li>✓ Ready to post in minutes</li>
-                <li>✓ Perfect for quick wins</li>
+              <p className="text-gray-400 text-sm mb-4"><strong className="text-red-400">❌ Without SochGuru:</strong></p>
+              <ul className="text-sm space-y-2 text-gray-300">
+                <li>Monday: Write English script (30 min)</li>
+                <li>Tuesday: Translate to Nepali (45 min)</li>
+                <li>Wednesday: Record voice samples (60 min)</li>
+                <li>Thursday: Wait for voice cloning (2 hours)</li>
+                <li>Friday: Generate avatars (3 hours)</li>
+                <li>Saturday: Edit & post both versions (2 hours)</li>
+                <li><strong>Total: 10+ hours</strong></li>
               </ul>
             </div>
-            <button onClick={()=>setMode('basic')} className="orange w-full mt-6 py-3 rounded-xl font-bold">Start Basic →</button>
-          </div>
-          <div className="glass rounded-2xl p-8 flex flex-col justify-between h-full border border-cyan-500">
             <div>
-              <h2 className="text-2xl font-bold mb-2">⚡ Pro</h2>
-              <p className="text-sm text-cyan-400 mb-4">Full creator control</p>
-              <ul className="text-xs space-y-1 text-gray-400">
-                <li>✓ 5-step workflow</li>
-                <li>✓ Clone your voice</li>
-                <li>✓ Generate avatars</li>
-                <li>✓ Full customization</li>
+              <p className="text-gray-400 text-sm mb-4"><strong className="text-green-400">✅ With SochGuru:</strong></p>
+              <ul className="text-sm space-y-2 text-gray-300">
+                <li>Monday 9:00 AM: Write one prompt</li>
+                <li>Monday 9:02 AM: Get bilingual scripts ready</li>
+                <li>Monday 9:05 AM: Post both versions</li>
+                <li>Monday 5:00 PM: Set up voice cloning (once)</li>
+                <li>Tuesday: Generate avatars on demand</li>
+                <li><strong className="text-green-400">Ongoing: 5 min per piece</strong></li>
+                <li className="text-green-400"><strong>Save 50+ hours/month</strong></li>
               </ul>
             </div>
-            <button onClick={()=>setMode('pro')} className="cyan w-full mt-6 py-3 rounded-xl font-bold">Start Pro →</button>
           </div>
+        </div>
+
+        {/* Choose Your Path */}
+        <div className="mb-16">
+          <h2 className="text-2xl font-bold text-center mb-8">Choose Your Path to Growth</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Basic */}
+            <div className="glass rounded-2xl p-8 hover:border-orange-500 transition border border-gray-700">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">🚀 Basic</h3>
+                  <p className="text-gray-400">For quick wins & testing</p>
+                </div>
+                <span className="text-xs bg-orange-900 text-orange-100 px-3 py-1 rounded-full">Start Free</span>
+              </div>
+              <p className="text-sm text-gray-300 mb-6">Describe your idea once. AI generates everything: persona, bilingual scripts, avatar prompts, ready-to-post content.</p>
+              <ul className="space-y-2 text-sm mb-8">
+                <li className="text-gray-300">✓ 1 prompt → full content pack</li>
+                <li className="text-gray-300">✓ Bilingual (English + Nepali)</li>
+                <li className="text-gray-300">✓ 2 minutes from idea to publish</li>
+                <li className="text-gray-300">✓ Great for: testing niches, rapid experimentation</li>
+                <li className="text-gray-400">✗ No voice cloning</li>
+                <li className="text-gray-400">✗ No avatar generation</li>
+              </ul>
+              <button onClick={()=>setMode('basic')} className="orange w-full py-3 rounded-xl font-bold">Start Creating Now →</button>
+              <p className="text-xs text-gray-500 text-center mt-3">Needs: Gemini API key (free tier available)</p>
+            </div>
+
+            {/* Pro */}
+            <div className="glass rounded-2xl p-8 hover:border-cyan-500 transition border border-cyan-500">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold mb-1">⚡ Pro</h3>
+                  <p className="text-cyan-400">For serious creators</p>
+                </div>
+                <span className="text-xs bg-cyan-900 text-cyan-100 px-3 py-1 rounded-full">Full Suite</span>
+              </div>
+              <p className="text-sm text-gray-300 mb-6">Complete control over every step. Clone your voice, generate avatars, publish directly. Build your personal brand authentically.</p>
+              <ul className="space-y-2 text-sm mb-8">
+                <li className="text-gray-300">✓ 5-step workflow (persona → voice → avatar → content → publish)</li>
+                <li className="text-gray-300">✓ Clone your voice (ElevenLabs)</li>
+                <li className="text-gray-300">✓ Generate avatars (HeyGen)</li>
+                <li className="text-gray-300">✓ Publish to Facebook instantly</li>
+                <li className="text-gray-300">✓ Full analytics & tracking</li>
+                <li className="text-gray-300">✓ Great for: building personal brand, long-term growth</li>
+              </ul>
+              <button onClick={()=>setMode('pro')} className="cyan w-full py-3 rounded-xl font-bold">Build Your Brand →</button>
+              <p className="text-xs text-gray-500 text-center mt-3">Needs: Gemini + ElevenLabs + HeyGen + Meta tokens</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Trust Builders */}
+        <div className="grid md:grid-cols-3 gap-6 mb-16">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-orange-400">100%</p>
+            <p className="text-sm text-gray-400">Open source. No lock-in. Built with you, not for you.</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-cyan-400">Bilingual</p>
+            <p className="text-sm text-gray-400">Every piece of content reaches both Nepal & the world.</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-green-400">50+ hrs</p>
+            <p className="text-sm text-gray-400">Saved per month. More time creating, less time tooling.</p>
+          </div>
+        </div>
+
+        {/* Footer CTA */}
+        <div className="text-center py-8 border-t border-gray-700">
+          <p className="text-gray-400 text-sm mb-4">Built by creators, for creators. Built in Hadigaun, Kathmandu. For the world.</p>
+          <p className="text-xs text-gray-500">Your data stays yours. No tracking. No BS.</p>
         </div>
       </div>
     </div>
