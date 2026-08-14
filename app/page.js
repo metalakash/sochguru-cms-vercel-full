@@ -18,11 +18,42 @@ export default function Page() {
   const [cloning, setCloning] = useState(false)
   const [cloneError, setCloneError] = useState('')
   const [cloneResult, setCloneResult] = useState(null)
+  const [generatingAvatar, setGeneratingAvatar] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
+  const [avatarResult, setAvatarResult] = useState(null)
+  const [avatarJobId, setAvatarJobId] = useState('')
+  const avatarPollRef = useRef(null)
 
   useEffect(()=>{
     const saved = localStorage.getItem('soch_cms_persona')
     if(saved) setPersona(JSON.parse(saved))
   },[])
+
+  useEffect(()=>{
+    if(!avatarJobId) {
+      if(avatarPollRef.current) clearInterval(avatarPollRef.current)
+      return
+    }
+    const poll = setInterval(async ()=>{
+      try{
+        const res = await fetch('/api/generate-avatar', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({action: 'status', jobId: avatarJobId})
+        })
+        const data = await res.json()
+        if(data.status === 'completed' && data.videoUrl){
+          setAvatarResult(data)
+          setAvatarJobId('')
+          if(avatarPollRef.current) clearInterval(avatarPollRef.current)
+        }
+      }catch(err){
+        console.error('Avatar status check failed:', err)
+      }
+    }, 5000)
+    avatarPollRef.current = poll
+    return ()=>clearInterval(poll)
+  }, [avatarJobId])
 
   const savePersona = ()=>{
     localStorage.setItem('soch_cms_persona', JSON.stringify(persona))
@@ -96,6 +127,36 @@ export default function Page() {
       setGenError('Could not generate content: '+err.message)
     }finally{
       setGenerating(false)
+    }
+  }
+
+  const generateAvatar = async ()=>{
+    if(!content) {
+      setAvatarError('Generate content first (Step 5)')
+      return
+    }
+    setGeneratingAvatar(true)
+    setAvatarError('')
+    setAvatarResult(null)
+    setAvatarJobId('')
+    try{
+      const voiceId = cloneResult?.results?.[0]?.voiceId
+      const res = await fetch('/api/generate-avatar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          action: 'generate',
+          script: content.englishVideo,
+          voiceId: voiceId || undefined
+        })
+      })
+      if(!res.ok) throw new Error('Server returned '+res.status)
+      const data = await res.json()
+      setAvatarJobId(data.jobId)
+    }catch(err){
+      setAvatarError('Avatar generation failed: '+err.message)
+    }finally{
+      setGeneratingAvatar(false)
     }
   }
 
@@ -238,20 +299,25 @@ export default function Page() {
       {step===4 && (
         <div className="glass rounded-2xl p-5">
           <h2 className="font-bold mb-3">Step 4: Avatar Builder - Circuit-Brain</h2>
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
             <div className="bg-black rounded p-3">
               <p className="text-xs text-gray-400">Collected:</p>
               <p className="text-xs">Persona: {persona.name || 'SochGuru'} - {persona.niche}</p>
-              <p className="text-xs">Voice: {voices.length} samples</p>
+              <p className="text-xs">Voice: {voices.length} samples{cloneResult?.status==='success' && ' ✓ Cloned'}</p>
               <p className="text-xs">Video: {videos.length} gestures</p>
-              <p className="text-xs mt-2 text-cyan-400">Avatar Prompt for Meta AI / Gemini Imagen:</p>
+              <p className="text-xs mt-2 text-cyan-400">Avatar Prompt:</p>
               <textarea className="w-full bg-zinc-900 border border-gray-700 rounded p-2 text-xs h-20 mt-1" defaultValue={`Same 3D character, curly hair, navy hoodie with glowing circuit-brain logo CIRCUIT-BRAIN, Pixar style, futuristic office holographic charts, Hadigaun Kathmandu, ${persona.niche}`}/>
             </div>
-            <div className="bg-black rounded p-3">
-              <p className="text-xs text-gray-400">Meta Native Options:</p>
-              <p className="text-xs">• Facebook Avatar: Create in FB App &gt; Avatars</p>
-              <p className="text-xs">• AI Studio: Upload avatar frame to ai.meta.com</p>
-              <p className="text-xs">• Avatar Stickers: Auto gesture stickers</p>
+            <div className="bg-black rounded p-3 space-y-2">
+              <p className="text-xs text-gray-400">Avatar Generation:</p>
+              <button onClick={generateAvatar} disabled={generatingAvatar || avatarJobId} className="orange w-full py-1 rounded text-xs disabled:opacity-50 font-bold">{avatarJobId ? '🎬 Generating (5s polls)…' : generatingAvatar ? 'Starting…' : '🎬 Generate with HeyGen'}</button>
+              {avatarError && <p className="text-red-400 text-xs">{avatarError}</p>}
+              {avatarResult?.videoUrl && (
+                <div className="bg-green-900 rounded p-2 text-xs text-green-100">
+                  <p className="font-bold">✓ Avatar Ready!</p>
+                  <video src={avatarResult.videoUrl} controls className="w-full mt-1 rounded"/>
+                </div>
+              )}
             </div>
           </div>
           <button onClick={()=>setStep(5)} className="orange w-full mt-4 py-2 rounded-xl font-bold">Build Content Page →</button>

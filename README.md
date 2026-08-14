@@ -61,6 +61,11 @@ git push -u origin main
      - These expire in 60 days; for permanent: use Graph API to extend user token to page token
      - Powers `/api/publish` to post to Facebook
    
+   - **`HEYGEN_API_KEY`** = API key from [heygen.com/api](https://www.heygen.com/api)
+     - Requires paid API plan (paid tiers available)
+     - Powers `/api/generate-avatar` to create 9:16 vertical videos (Step 4)
+     - Videos generated asynchronously; polls every 5s until complete
+   
    - **`GEMINI_MODEL`** = optional, defaults to `gemini-2.5-flash`
 6. Deploy → You get URL: https://sochguru-cms.vercel.app
 7. Open on phone → Add to Home Screen → You have native app
@@ -85,18 +90,23 @@ vercel
 - Records Neutral, Excited, and Nepali tone variants
 - Requires `ELEVENLABS_API_KEY` (free tier available at elevenlabs.io)
 
+**Avatar Generation (`/api/generate-avatar`)**
+- Generates 9:16 vertical video with HeyGen avatar speaking the content script
+- Uses cloned voice if available, otherwise uses HeyGen default
+- Async job with polling (checks status every 5 seconds)
+- Returns video URL when generation completes
+- Requires `HEYGEN_API_KEY` (paid API plan)
+
 **Publishing (`/api/publish`)**
 - Posts bilingual statuses (Nepali + English) to Meta/Facebook page
 - Requires `META_ACCESS_TOKEN` (long-lived page/Instagram token)
 - Shows publish status inline (success, partial, or error details)
 
 ### Remaining Agent-Ready Architecture (Future)
-These routes are stubbed and ready for agent integration:
-- `/api/clone-voice` -> Voice Clone Agent (ElevenLabs)
-- `/api/generate-avatar` -> Avatar Video Agent (HeyGen, Veo)
-- `/api/analytics` -> Analytics Agent
+These routes are ready for agent integration:
+- `/api/analytics` -> Analytics Agent (track views, engagement, conversion)
 
-When you plug agents, they listen to events: CreatorCreated, etc.
+Full event flow: CreatorCreated → VoiceCloned → AvatarReady → ContentGenerated → Published → AnalyticsUpdated
 
 ### What You Get After Deploy
 - Live CMS at your Vercel URL
