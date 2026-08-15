@@ -36,7 +36,7 @@ Return only the JSON object.`
 }
 
 async function callGemini(persona) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_CMS
   if (!apiKey) return null
 
   const res = await fetch(

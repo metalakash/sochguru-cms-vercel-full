@@ -1,6 +1,15 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
+const GESTURE_LINES = {
+  'Smile': 'Hey, I\'m building in public from Kathmandu.',
+  'Pointing': 'Here\'s the one thing that changed my week.',
+  'Thinking': 'I don\'t have this fully figured out yet.',
+  'Thumbs Up': 'That one\'s worth trying yourself.',
+  'Explaining': 'Let me walk you through how this works.',
+  'Walking': 'Let\'s learn and grow together.'
+}
+
 export default function Page() {
   const [mode, setMode] = useState(null) // null = selector, 'basic' or 'pro'
   const [step, setStep] = useState(1)
@@ -26,6 +35,8 @@ export default function Page() {
   const avatarPollRef = useRef(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [analytics, setAnalytics] = useState(null)
+  const [activeGesture, setActiveGesture] = useState('Smile')
+  const [camReady, setCamReady] = useState(false)
 
   // Basic mode state
   const [basicPrompt, setBasicPrompt] = useState('')
@@ -98,6 +109,7 @@ export default function Page() {
       const s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
       if(previewRef.current) previewRef.current.srcObject = s
       window._stream = s
+      setCamReady(true)
     }catch(err){
       alert('Could not access camera/mic: '+err.message+'. Please allow permission and try again.')
     }
@@ -127,13 +139,18 @@ export default function Page() {
     try{
       const stream = window._stream || await navigator.mediaDevices.getUserMedia({video:true, audio:true})
       window._stream = stream
+      if(stream.getAudioTracks().length === 0){
+        alert('No microphone track found. Reload and allow both camera and microphone so your voice is captured with the gesture.')
+        return
+      }
+      const gesture = activeGesture
       const rec = new MediaRecorder(stream)
       let chunks=[]
       rec.ondataavailable = e=>chunks.push(e.data)
       rec.onstop = ()=>{
         const blob = new Blob(chunks, {type:'video/webm'})
         const url = URL.createObjectURL(blob)
-        setVideos(v=>[...v, {url, blob, gesture:'custom'}])
+        setVideos(v=>[...v, {url, blob, gesture}])
       }
       rec.start()
       setRecording(true)
@@ -703,13 +720,45 @@ export default function Page() {
       {mode==='pro' && step===3 && (
         <div className="glass rounded-2xl p-5">
           <h2 className="font-bold mb-3">Step 3: Video + Gesture Capture {recording && <span className="text-red-400">● Recording</span>}</h2>
+          <p className="text-xs text-gray-400 mb-3">
+            Pick a gesture, then record 5 seconds of yourself doing it <span className="text-white">while speaking the line below</span> —
+            voice, movement, and expression all get captured together in one clip.
+          </p>
           <video ref={previewRef} autoPlay muted playsInline className="w-full h-48 bg-black rounded object-cover mb-3"/>
-          <div className="flex gap-2 mb-3"><button onClick={startCam} className="glass px-4 py-2 rounded text-xs">Start Camera</button><button onClick={recordVideo} className="orange px-4 py-2 rounded text-xs">● Record 5s Gesture</button></div>
+
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs mb-3">
-            {['Smile','Pointing','Thinking','Thumbs Up','Explaining','Walking'].map(g=><div key={g} className="bg-black p-2 rounded text-center">{g}</div>)}
+            {Object.keys(GESTURE_LINES).map(g=>(
+              <button
+                key={g}
+                onClick={()=>setActiveGesture(g)}
+                className={`p-2 rounded text-center transition ${activeGesture===g ? 'orange font-bold' : 'bg-black hover:bg-zinc-900'}`}
+              >{g}</button>
+            ))}
           </div>
-          <div className="flex gap-2 flex-wrap">{videos.map((v,i)=><video key={i} src={v.url} controls className="w-32 h-20 rounded bg-black"/>)}<span className="text-xs text-gray-400">{videos.length} videos</span></div>
-          <button onClick={()=>setStep(4)} className="orange w-full mt-4 py-2 rounded-xl font-bold">Save Video → Avatar</button>
+
+          <div className="bg-black rounded p-3 mb-3">
+            <p className="text-xs text-gray-400 mb-1">Say this while you {activeGesture.toLowerCase()}:</p>
+            <p className="text-sm text-cyan-300">"{GESTURE_LINES[activeGesture]}"</p>
+          </div>
+
+          <div className="flex gap-2 mb-3">
+            <button onClick={startCam} className="glass px-4 py-2 rounded text-xs">{camReady ? '✓ Camera & Mic On' : 'Start Camera & Mic'}</button>
+            <button onClick={recordVideo} disabled={!camReady || recording} className="orange px-4 py-2 rounded text-xs disabled:opacity-50">
+              {recording ? 'Recording…' : `● Record ${activeGesture} (5s)`}
+            </button>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {videos.map((v,i)=>(
+              <div key={i} className="text-center">
+                <video src={v.url} controls className="w-32 h-20 rounded bg-black"/>
+                <p className="text-xs text-gray-400 mt-1">{v.gesture}</p>
+              </div>
+            ))}
+            <span className="text-xs text-gray-400 self-center">{videos.length} clips (video + voice)</span>
+          </div>
+
+          <button onClick={()=>setStep(4)} disabled={videos.length===0} className="orange w-full mt-4 py-2 rounded-xl font-bold disabled:opacity-50">Save Video → Avatar</button>
         </div>
       )}
 

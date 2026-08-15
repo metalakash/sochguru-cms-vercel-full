@@ -41,8 +41,12 @@ Use authentic Nepali terms and cultural references. Make content "building in pu
 Return only the JSON object.`
 }
 
+function getApiKey() {
+  return process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_CMS
+}
+
 async function callGemini(userPrompt) {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = getApiKey()
   if (!apiKey) return null
 
   const res = await fetch(
@@ -80,7 +84,7 @@ export async function POST(request) {
     return Response.json({ error: 'prompt is required' }, { status: 400 })
   }
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!getApiKey()) {
     return Response.json({
       error: 'No Gemini API key on the server. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables, then redeploy.'
     }, { status: 503 })
