@@ -297,6 +297,9 @@ export default function Page() {
             Publish it in both<br/>
             <span style={{color:'var(--accent)'}}>Nepali and English.</span>
           </h1>
+          <h2 className="t-h2 mb-6" style={{color:'var(--ink-3)'}}>
+            Ek choti likhe. Duwai bhashama publish garne.
+          </h2>
           <p className="t-lead max-w-xl">
             Most tools make you pick a language. This one takes a single description
             of your idea and returns the Nepali post, the English post, and the video
@@ -306,7 +309,10 @@ export default function Page() {
 
         {/* Who's building this */}
         <section className="hairline py-16">
-          <p className="t-label mono mb-8">Who's building this</p>
+          <div className="flex items-baseline justify-between gap-6 mb-8">
+            <p className="t-label mono">Who's building this</p>
+            <p className="t-label mono" style={{color:'var(--ink-3)'}}>Ko banayo yo?</p>
+          </div>
           <div className="space-y-5 t-body" style={{color:'var(--ink-2)'}}>
             <p style={{color:'var(--ink)', fontSize:'1.0625rem', lineHeight:1.6}}>
               I spent a decade in banking. Now I'm building with agentic AI from
@@ -332,7 +338,10 @@ export default function Page() {
 
         {/* What it actually does */}
         <section className="hairline py-16">
-          <p className="t-label mono mb-8">What one prompt returns</p>
+          <div className="flex items-baseline justify-between gap-6 mb-8">
+            <p className="t-label mono">What one prompt returns</p>
+            <p className="t-label mono" style={{color:'var(--ink-3)'}}>Ek prompt ko utput</p>
+          </div>
           <div className="card divide-y" style={{borderColor:'var(--line)'}}>
             {[
               ['Nepali status', 'Short-form post, Romanized Nepali'],
@@ -373,17 +382,17 @@ export default function Page() {
               <p className="t-sm mono mt-3">Needs a Gemini key</p>
             </div>
 
-            <div className="card p-6 flex flex-col">
+            <div className="card p-6 flex flex-col opacity-60">
               <div className="flex items-center gap-2.5 mb-3">
                 <h2 className="t-h2">Pro</h2>
-                <span className="pill pill-accent mono">4 KEYS</span>
+                <span className="pill pill-muted mono">COMING SOON</span>
               </div>
               <p className="t-body mb-6 flex-1">
                 Five steps: persona, your recorded voice, gestures, avatar video, then
                 content and publishing. Slower to set up, but the output sounds and
                 looks like you.
               </p>
-              <button onClick={()=>setMode('pro')} className="btn btn-ghost w-full">
+              <button disabled className="btn btn-ghost w-full opacity-50 cursor-not-allowed">
                 Set up the full workflow
               </button>
               <p className="t-sm mono mt-3">Gemini · ElevenLabs · HeyGen · Meta</p>
