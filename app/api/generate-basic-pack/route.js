@@ -1,4 +1,4 @@
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -45,11 +45,8 @@ function getApiKey() {
   return process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_CMS
 }
 
-async function callGemini(userPrompt) {
-  const apiKey = getApiKey()
-  if (!apiKey) return null
-
-  const res = await fetch(
+async function requestGemini(apiKey, userPrompt) {
+  return fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
@@ -64,6 +61,17 @@ async function callGemini(userPrompt) {
       })
     }
   )
+}
+
+async function callGemini(userPrompt) {
+  const apiKey = getApiKey()
+  if (!apiKey) return null
+
+  let res = await requestGemini(apiKey, userPrompt)
+  if (res.status === 503) {
+    await new Promise(r => setTimeout(r, 1200))
+    res = await requestGemini(apiKey, userPrompt)
+  }
 
   if (!res.ok) {
     const errText = await res.text()

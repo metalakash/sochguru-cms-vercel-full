@@ -1,6 +1,6 @@
 import { templateContent } from '../../../lib/content-template'
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest'
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
