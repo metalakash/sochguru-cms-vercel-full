@@ -1,32 +1,24 @@
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY
-const HEYGEN_BASE = 'https://api.heygen.com/v1'
+const HEYGEN_BASE = 'https://api.heygen.com/v3'
+const DEFAULT_AVATAR_ID = 'Wayne_20240711'
 
-async function createHeyGenVideo(script, imageUrl, voiceId) {
+async function createHeyGenVideo(script, voiceId) {
   if (!HEYGEN_API_KEY) throw new Error('HEYGEN_API_KEY not configured')
+  if (!voiceId) throw new Error('A HeyGen voice_id is required — the ElevenLabs voice cloned in Step 2 is not a HeyGen voice ID, HeyGen has its own voice catalog/cloning path.')
 
   const payload = {
-    video_inputs: [
-      {
-        character: {
-          type: 'avatar',
-          avatar_id: 'Wayne_20240711', // Default HeyGen avatar
-          ...(imageUrl && { image_url: imageUrl })
-        },
-        voice: {
-          type: 'elevenlabs',
-          ...(voiceId ? { voice_id: voiceId } : { voice_id: 'default' }),
-          input_text: script
-        }
-      }
-    ],
-    aspect_ratio: '9:16', // Vertical for social media
-    output_format: 'mp4'
+    type: 'avatar',
+    avatar_id: DEFAULT_AVATAR_ID,
+    script,
+    voice_id: voiceId,
+    aspect_ratio: '9:16',
+    resolution: '1080p'
   }
 
-  const res = await fetch(`${HEYGEN_BASE}/video_sessions`, {
+  const res = await fetch(`${HEYGEN_BASE}/videos`, {
     method: 'POST',
     headers: {
-      'X-CUSTOM-HEADER': HEYGEN_API_KEY,
+      'X-Api-Key': HEYGEN_API_KEY,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(payload)
@@ -39,7 +31,7 @@ async function createHeyGenVideo(script, imageUrl, voiceId) {
 
   const data = await res.json()
   return {
-    jobId: data.data?.video_session_id,
+    jobId: data.data?.video_id,
     status: 'pending',
     videoUrl: null
   }
@@ -48,10 +40,8 @@ async function createHeyGenVideo(script, imageUrl, voiceId) {
 async function checkHeyGenStatus(jobId) {
   if (!HEYGEN_API_KEY) throw new Error('HEYGEN_API_KEY not configured')
 
-  const res = await fetch(`${HEYGEN_BASE}/video_sessions/${jobId}`, {
-    headers: {
-      'X-CUSTOM-HEADER': HEYGEN_API_KEY
-    }
+  const res = await fetch(`${HEYGEN_BASE}/videos/${jobId}`, {
+    headers: { 'X-Api-Key': HEYGEN_API_KEY }
   })
 
   if (!res.ok) {
@@ -60,18 +50,18 @@ async function checkHeyGenStatus(jobId) {
 
   const data = await res.json()
   const status = data.data?.status
-  const videoUrl = data.data?.video_url
 
   return {
     jobId,
     status,
-    videoUrl: status === 'completed' ? videoUrl : null
+    videoUrl: status === 'completed' ? data.data?.video_url : null,
+    failureMessage: status === 'failed' ? data.data?.failure_message : null
   }
 }
 
 export async function POST(request) {
   const body = await request.json().catch(() => null)
-  const { action, script, imageUrl, voiceId, jobId } = body
+  const { action, script, voiceId, jobId } = body || {}
 
   if (action === 'generate') {
     if (!script) {
@@ -81,18 +71,18 @@ export async function POST(request) {
     if (!HEYGEN_API_KEY) {
       return Response.json(
         { error: 'Avatar generation not configured. Set HEYGEN_API_KEY in environment.' },
-        { status: 500 }
+        { status: 503 }
       )
     }
 
     try {
-      const result = await createHeyGenVideo(script, imageUrl, voiceId)
+      const result = await createHeyGenVideo(script, voiceId)
       return Response.json({
         ...result,
         message: 'Video generation started. Check status with jobId.'
       })
     } catch (err) {
-      return Response.json({ error: err.message }, { status: 500 })
+      return Response.json({ error: err.message }, { status: 502 })
     }
   }
 
@@ -105,7 +95,7 @@ export async function POST(request) {
       const result = await checkHeyGenStatus(jobId)
       return Response.json(result)
     } catch (err) {
-      return Response.json({ error: err.message }, { status: 500 })
+      return Response.json({ error: err.message }, { status: 502 })
     }
   }
 

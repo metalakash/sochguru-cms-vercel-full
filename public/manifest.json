@@ -1,11 +1,15 @@
 {
+  "id": "/",
   "name": "SochGuru Creator CMS",
-  "short_name": "SochGuru CMS",
-  "description": "Full Content Management Tool for Creators - Voice, Video, Gesture, Persona, Avatar, Bilingual, Meta",
+  "short_name": "SochGuru",
+  "description": "Write once, publish bilingual — Nepali and English content for creators, from one prompt.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050508",
-  "theme_color": "#FF6B00",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "categories": ["productivity", "social"],
+  "background_color": "#08080a",
+  "theme_color": "#ff6b00",
   "icons": [
     {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}

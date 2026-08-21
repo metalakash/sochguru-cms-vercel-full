@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
+const STEP_NAMES = ['Persona', 'Voice', 'Video + Gesture', 'Avatar', 'Content & Publish']
+
 const GESTURE_LINES = {
   'Smile': 'Hey, I\'m building in public from Kathmandu.',
   'Pointing': 'Here\'s the one thing that changed my week.',
@@ -67,6 +69,11 @@ export default function Page() {
           setAvatarJobId('')
           if(avatarPollRef.current) clearInterval(avatarPollRef.current)
           trackAnalytics('avatar_generated', {status: 'success'})
+        } else if(data.status === 'failed'){
+          setAvatarError('HeyGen generation failed: '+(data.failureMessage || 'unknown error'))
+          setAvatarJobId('')
+          if(avatarPollRef.current) clearInterval(avatarPollRef.current)
+          trackAnalytics('avatar_generated', {status: 'error', error: data.failureMessage})
         }
       }catch(err){
         console.error('Avatar status check failed:', err)
@@ -218,7 +225,7 @@ export default function Page() {
     setAvatarResult(null)
     setAvatarJobId('')
     try{
-      const voiceId = cloneResult?.results?.[0]?.voiceId
+      const voiceId = cloneResult?.voiceId
       const res = await fetch('/api/generate-avatar', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -228,8 +235,8 @@ export default function Page() {
           voiceId: voiceId || undefined
         })
       })
-      if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
+      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setAvatarJobId(data.jobId)
     }catch(err){
       setAvatarError('Avatar generation failed: '+err.message)
@@ -256,14 +263,10 @@ export default function Page() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({voiceSamples, creatorName: persona.name || 'SochGuru'})
       })
-      if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
+      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setCloneResult(data)
-      if(data.status === 'success'){
-        trackAnalytics('voice_cloned', {voiceCount: voices.length, status: 'success'})
-      }else{
-        trackAnalytics('voice_cloned', {voiceCount: voices.length, status: 'partial', errors: data.results.filter(r=>r.status==='failed').length})
-      }
+      trackAnalytics('voice_cloned', {sampleCount: voices.length, status: 'success'})
     }catch(err){
       setCloneError('Voice cloning failed: '+err.message)
       trackAnalytics('voice_cloned', {status: 'error', error: err.message})
@@ -283,8 +286,8 @@ export default function Page() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({pageId, content})
       })
-      if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
+      if(!res.ok && !data.results) throw new Error(data.error || `Server returned ${res.status}`)
       setPubResult(data)
       trackAnalytics('published', {status: data.status, postsCount: data.results?.length})
     }catch(err){
@@ -453,7 +456,7 @@ export default function Page() {
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
       <header className="flex justify-between items-center gap-4 py-5 mb-8 hairline" style={{borderTop:'none', borderBottom:'1px solid var(--line)'}}>
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={()=>setMode(null)} className="t-sm hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
+          <button onClick={()=>setMode(null)} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
           <div className="min-w-0">
             <h1 className="text-base font-semibold truncate">
               SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{mode==='basic' ? 'Basic' : 'Pro'}</span>
@@ -470,13 +473,27 @@ export default function Page() {
       </header>
 
       {mode==='pro' && (
-        <div className="grid grid-cols-5 gap-2 mb-6">
-          {[1,2,3,4,5].map(n=>(
-            <button key={n} onClick={()=>setStep(n)} className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}>
-              {n===1?'1 Persona': n===2?'2 Voice': n===3?'3 Video+Gesture': n===4?'4 Avatar': '5 Content & Publish'}
-            </button>
-          ))}
-        </div>
+        <>
+          {/* Desktop: full step-pill row, tap any step to jump */}
+          <div className="hidden md:grid grid-cols-5 gap-2 mb-6">
+            {[1,2,3,4,5].map(n=>(
+              <button key={n} onClick={()=>setStep(n)} className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}>
+                {n}&nbsp;{STEP_NAMES[n-1]}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile: compact progress header — per-step Back/Next lives in each step body */}
+          <div className="md:hidden mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="t-sm mono">Step {step} of 5</span>
+              <span className="t-sm mono" style={{color:'var(--accent)'}}>{STEP_NAMES[step-1]}</span>
+            </div>
+            <div style={{height:'3px', background:'var(--line)', borderRadius:'999px', overflow:'hidden'}}>
+              <div style={{height:'100%', width:`${(step/5)*100}%`, background:'var(--accent)', transition:'width .2s ease'}}/>
+            </div>
+          </div>
+        </>
       )}
 
       {mode==='basic' && (
@@ -531,11 +548,11 @@ export default function Page() {
                 ['Video prompt', basicResult.veoPrompt]
               ].filter(([,v]) => v).map(([label, value]) => (
                 <div key={label} className="card p-5">
-                  <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex items-center justify-between gap-4 mb-3">
                     <p className="t-label mono">{label}</p>
                     <button
                       onClick={()=>navigator.clipboard?.writeText(value)}
-                      className="t-sm hover:opacity-70 transition shrink-0"
+                      className="t-sm tap-link hover:opacity-70 transition shrink-0"
                       style={{color:'var(--ink-3)'}}
                     >Copy</button>
                   </div>
@@ -701,9 +718,10 @@ export default function Page() {
                 {cloneError && <p className="text-red-400 text-sm p-3 bg-red-900 bg-opacity-20 rounded-lg">{cloneError}</p>}
 
                 {cloneResult && (
-                  <div className={`rounded-lg p-4 text-sm ${cloneResult.status==='success' ? 'bg-green-900 bg-opacity-20 border border-green-700 text-green-100' : 'bg-yellow-900 bg-opacity-20 border border-yellow-700 text-yellow-100'}`}>
-                    <p className="font-bold mb-2">{cloneResult.status==='success' ? '✓ Voice Cloned Successfully!' : '⚠ Partial Clone'}</p>
-                    {cloneResult.results?.map((r, i)=><p key={i} className="text-xs">{r.type}: {r.status} {r.voiceId && `→ Ready`}</p>)}
+                  <div className="rounded-lg p-4 text-sm bg-green-900 bg-opacity-20 border border-green-700 text-green-100">
+                    <p className="font-bold mb-1">✓ Voice Cloned Successfully!</p>
+                    <p className="text-xs">{cloneResult.sampleCount} samples combined into one voice · ID: {cloneResult.voiceId}</p>
+                    {cloneResult.requiresVerification && <p className="text-xs mt-1 text-yellow-300">ElevenLabs may require verification before this voice can generate audio.</p>}
                   </div>
                 )}
               </div>
@@ -732,6 +750,7 @@ export default function Page() {
                 key={g}
                 onClick={()=>setActiveGesture(g)}
                 className={`p-2 rounded text-center transition ${activeGesture===g ? 'orange font-bold' : 'bg-black hover:bg-zinc-900'}`}
+                style={{minHeight:'44px'}}
               >{g}</button>
             ))}
           </div>
@@ -741,12 +760,23 @@ export default function Page() {
             <p className="text-sm text-cyan-300">"{GESTURE_LINES[activeGesture]}"</p>
           </div>
 
-          <div className="flex gap-2 mb-3">
-            <button onClick={startCam} className="glass px-4 py-2 rounded text-xs">{camReady ? '✓ Camera & Mic On' : 'Start Camera & Mic'}</button>
-            <button onClick={recordVideo} disabled={!camReady || recording} className="orange px-4 py-2 rounded text-xs disabled:opacity-50">
-              {recording ? 'Recording…' : `● Record ${activeGesture} (5s)`}
-            </button>
-          </div>
+          {!camReady && (
+            <button onClick={startCam} className="glass w-full px-4 py-2 rounded text-xs mb-3">Start Camera & Mic</button>
+          )}
+
+          {camReady && (
+            <div className="flex flex-col items-center gap-2 mb-3">
+              <button
+                onClick={recordVideo}
+                disabled={recording}
+                className={`record-btn ${recording ? 'rec-dot' : ''}`}
+                aria-label={`Record ${activeGesture}, 5 seconds`}
+              >
+                <span className="record-btn-dot"/>
+              </button>
+              <p className="text-xs text-gray-400">{recording ? 'Recording…' : `Tap to record “${activeGesture}” · 5s`}</p>
+            </div>
+          )}
 
           <div className="flex gap-2 flex-wrap">
             {videos.map((v,i)=>(
@@ -758,7 +788,10 @@ export default function Page() {
             <span className="text-xs text-gray-400 self-center">{videos.length} clips (video + voice)</span>
           </div>
 
-          <button onClick={()=>setStep(4)} disabled={videos.length===0} className="orange w-full mt-4 py-2 rounded-xl font-bold disabled:opacity-50">Save Video → Avatar</button>
+          <div className="flex gap-3 mt-4">
+            <button onClick={()=>setStep(2)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
+            <button onClick={()=>setStep(4)} disabled={videos.length===0} className="orange flex-1 py-3 rounded-xl font-bold disabled:opacity-50">Save Video → Avatar</button>
+          </div>
         </div>
       )}
 
@@ -786,14 +819,20 @@ export default function Page() {
               )}
             </div>
           </div>
-          <button onClick={()=>setStep(5)} className="orange w-full mt-4 py-2 rounded-xl font-bold">Build Content Page →</button>
+          <div className="flex gap-3 mt-4">
+            <button onClick={()=>setStep(3)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
+            <button onClick={()=>setStep(5)} className="orange flex-1 py-3 rounded-xl font-bold">Build Content Page →</button>
+          </div>
         </div>
       )}
 
       {mode==='pro' && step===5 && (
         <div className="grid md:grid-cols-2 gap-6">
           <div className="glass rounded-2xl p-5">
-            <h2 className="font-bold mb-3">Step 5: Content Management Tool</h2>
+            <div className="flex items-center gap-3 mb-3">
+              <button onClick={()=>setStep(4)} className="t-sm tap-link hover:opacity-70 transition" style={{color:'var(--ink-3)'}}>← Back</button>
+              <h2 className="font-bold">Step 5: Content Management Tool</h2>
+            </div>
             <input value={pageId} onChange={e=>setPageId(e.target.value)} placeholder="Page ID 61590521291901" className="w-full bg-black border border-gray-700 rounded p-2 mb-2 text-sm"/>
             <button onClick={generateContent} disabled={generating} className="orange w-full py-2 rounded-xl font-bold disabled:opacity-50">{generating ? 'Generating…' : 'Generate Bilingual Pack'}</button>
             {genError && <p className="text-red-400 text-xs mt-2">{genError}</p>}
@@ -838,7 +877,7 @@ export default function Page() {
         <div className="glass rounded-2xl p-5 mt-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-bold">📊 Analytics Dashboard</h2>
-            <button onClick={()=>setShowAnalytics(false)} className="text-gray-400 text-xs">✕ Close</button>
+            <button onClick={()=>setShowAnalytics(false)} className="text-gray-400 text-xs tap-link">✕ Close</button>
           </div>
           {!analytics ? (
             <p className="text-xs text-gray-400">Loading analytics...</p>

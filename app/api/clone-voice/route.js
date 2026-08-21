@@ -1,19 +1,20 @@
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io/v1'
 
-async function uploadVoiceToElevenLabs(voiceData, voiceName) {
+async function cloneVoiceFromSamples(samples, voiceName) {
   if (!ELEVENLABS_API_KEY) throw new Error('ELEVENLABS_API_KEY not configured')
 
   const formData = new FormData()
   formData.append('name', voiceName)
-  formData.append('files', new Blob([voiceData], { type: 'audio/webm' }), 'voice.webm')
-  formData.append('description', `Voice sample for SochGuru creator: ${voiceName}`)
+  formData.append('description', `Cloned voice for SochGuru creator: ${voiceName}`)
+  samples.forEach((sample, i) => {
+    const buf = Buffer.from(sample.data, 'base64')
+    formData.append('files', new Blob([buf], { type: 'audio/webm' }), `${sample.type || 'sample'}-${i}.webm`)
+  })
 
   const res = await fetch(`${ELEVENLABS_BASE}/voices/add`, {
     method: 'POST',
-    headers: {
-      'xi-api-key': ELEVENLABS_API_KEY
-    },
+    headers: { 'xi-api-key': ELEVENLABS_API_KEY },
     body: formData
   })
 
@@ -23,7 +24,8 @@ async function uploadVoiceToElevenLabs(voiceData, voiceName) {
   }
 
   const data = await res.json()
-  return { voiceId: data.voice_id, voiceName: data.name }
+  // The IVC response is only { voice_id, requires_verification } — no "name" key to echo back.
+  return { voiceId: data.voice_id, voiceName, requiresVerification: data.requires_verification }
 }
 
 export async function POST(request) {
@@ -38,28 +40,18 @@ export async function POST(request) {
     if (!ELEVENLABS_API_KEY) {
       return Response.json(
         { error: 'Voice cloning not configured. Set ELEVENLABS_API_KEY in environment.' },
-        { status: 500 }
+        { status: 503 }
       )
     }
 
-    const results = []
-    for (const sample of voiceSamples) {
-      try {
-        const voiceData = Buffer.from(sample.data, 'base64')
-        const voiceName = `${creatorName}-${sample.type || 'sample'}`
-        const voiceInfo = await uploadVoiceToElevenLabs(voiceData, voiceName)
-        results.push({ type: sample.type, status: 'cloned', ...voiceInfo })
-      } catch (err) {
-        results.push({ type: sample.type, status: 'failed', error: err.message })
-      }
-    }
+    // All samples (neutral/excited/nepali) go into one clone — more training audio
+    // makes a better single voice, rather than three separate voices where only
+    // one would ever get used downstream.
+    const voiceName = creatorName || 'SochGuru Creator'
+    const result = await cloneVoiceFromSamples(voiceSamples, voiceName)
 
-    const allSuccess = results.every(r => r.status === 'cloned')
-    return Response.json(
-      { results, status: allSuccess ? 'success' : 'partial' },
-      { status: allSuccess ? 200 : 207 }
-    )
+    return Response.json({ ...result, sampleCount: voiceSamples.length, status: 'success' })
   } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 })
+    return Response.json({ error: err.message, status: 'error' }, { status: 502 })
   }
 }
