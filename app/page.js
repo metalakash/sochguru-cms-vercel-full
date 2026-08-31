@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const STEP_NAMES = ['Persona', 'Voice', 'Video + Gesture', 'Avatar', 'Content & Publish']
 
@@ -12,15 +12,155 @@ const GESTURE_LINES = {
   'Walking': 'Let\'s learn and grow together.'
 }
 
+const VOICE_TAKES = [
+  { type: 'neutral', label: 'Neutral', hint: 'Speak naturally, explain something', example: 'My decade in banking taught me...' },
+  { type: 'excited', label: 'Excited', hint: 'Show enthusiasm and energy', example: 'Let\'s learn and grow together!' },
+  { type: 'nepali', label: 'Nepali', hint: 'Natural Nepali, Romanized is fine', example: 'Soch yesto cha...' }
+]
+
+// HeyGen jobs that never resolve used to poll forever. Ten minutes is well past
+// a normal render.
+const AVATAR_POLL_MS = 5000
+const AVATAR_MAX_POLLS = 120
+
+/* ------------------------------------------------------------------ */
+/* Small presentational pieces                                         */
+/* ------------------------------------------------------------------ */
+
+function Toasts({ items, dismiss }) {
+  if (items.length === 0) return null
+  return (
+    <div className="toast-wrap" role="region" aria-label="Notifications">
+      {items.map(t => (
+        <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'err' ? 'alert' : 'status'}>
+          <span className="toast-bar" aria-hidden="true" />
+          <span className="flex-1">{t.message}</span>
+          <button
+            onClick={() => dismiss(t.id)}
+            className="shrink-0 hover:opacity-70 transition"
+            style={{ color: 'var(--ink-3)', minWidth: '24px' }}
+            aria-label="Dismiss notification"
+          >✕</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Labeled({ id, label, hint, children }) {
+  return (
+    <div>
+      <label htmlFor={id} className="t-label mono block mb-2">{label}</label>
+      {children}
+      {hint && <p className="t-sm mt-1.5">{hint}</p>}
+    </div>
+  )
+}
+
+function Pending({ label }) {
+  return (<><span className="spinner" aria-hidden="true" />{label}</>)
+}
+
+function ContentCard({ label, value, onCopy }) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between gap-4 mb-3">
+        <p className="t-label mono">{label}</p>
+        <button
+          onClick={onCopy}
+          className="t-sm tap-link hover:opacity-70 transition shrink-0"
+          style={{ color: 'var(--ink-3)' }}
+        >Copy</button>
+      </div>
+      <p className="t-body whitespace-pre-wrap" style={{ color: 'var(--ink)' }}>{value}</p>
+    </div>
+  )
+}
+
+function GeneratingSkeleton() {
+  return (
+    <div className="mt-10 space-y-4" aria-hidden="true">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="card p-5">
+          <div className="skeleton mb-3" style={{ height: '11px', width: '30%' }} />
+          <div className="skeleton mb-2" style={{ height: '13px', width: '100%' }} />
+          <div className="skeleton" style={{ height: '13px', width: '72%' }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Shown instead of the app when CMS_ACCESS_CODE is set and the visitor has no cookie. */
+function AccessGate({ onUnlock }) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async e => {
+    e.preventDefault()
+    if (!code.trim() || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not verify that code.')
+      onUnlock()
+    } catch (err) {
+      setError(err.message)
+      setCode('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="w-full max-w-sm">
+        <p className="t-label mono mb-5">Hadigaun, Kathmandu</p>
+        <h1 className="t-h1 mb-3">SochGuru</h1>
+        <p className="t-body mb-8">
+          This instance is private. Enter the access code to continue.
+        </p>
+        <form onSubmit={submit} className="space-y-3">
+          <Labeled id="access-code" label="Access code">
+            <input
+              id="access-code"
+              type="password"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              className="field"
+              autoComplete="current-password"
+              autoFocus
+            />
+          </Labeled>
+          {error && <div className="note note-err" role="alert">{error}</div>}
+          <button type="submit" disabled={busy || !code.trim()} className="btn btn-primary w-full">
+            {busy ? <Pending label="Checking…" /> : 'Unlock'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
 export default function Page() {
   const [mode, setMode] = useState(null) // null = selector, 'basic' or 'pro'
   const [step, setStep] = useState(1)
   const [persona, setPersona] = useState({name:'', story:'My decade in banking. Shifting to Agentic AI and culture in Nepal. I don\'t have all the answers. Just sharing as I navigate it all. Let\'s learn and grow together.', niche:'Agentic AI', audience:'Both Bilingual'})
   const [voices, setVoices] = useState([])
   const [videos, setVideos] = useState([])
-  const [pageId, setPageId] = useState('61590521291901')
+  const [pageId, setPageId] = useState('')
   const [content, setContent] = useState(null)
   const previewRef = useRef(null)
+  const streamRef = useRef(null)
   const [recording, setRecording] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState('')
@@ -34,7 +174,6 @@ export default function Page() {
   const [avatarError, setAvatarError] = useState('')
   const [avatarResult, setAvatarResult] = useState(null)
   const [avatarJobId, setAvatarJobId] = useState('')
-  const avatarPollRef = useRef(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [analytics, setAnalytics] = useState(null)
   const [activeGesture, setActiveGesture] = useState('Smile')
@@ -46,304 +185,481 @@ export default function Page() {
   const [basicResult, setBasicResult] = useState(null)
   const [basicError, setBasicError] = useState('')
 
-  useEffect(()=>{
-    const saved = localStorage.getItem('soch_cms_persona')
-    if(saved) setPersona(JSON.parse(saved))
-  },[])
+  // Optimistically open so the hero paints immediately — a "Loading…" flash in
+  // front of the CTA costs more than it buys. The landing page carries nothing
+  // sensitive, and every API route enforces the gate server-side regardless.
+  const [gate, setGate] = useState('open')
 
-  useEffect(()=>{
-    if(!avatarJobId) {
-      if(avatarPollRef.current) clearInterval(avatarPollRef.current)
-      return
+  /* ---------------- toasts ---------------- */
+  const [toasts, setToasts] = useState([])
+  const dismissToast = useCallback(id => setToasts(t => t.filter(x => x.id !== id)), [])
+  const toast = useCallback((message, kind = 'err') => {
+    const id = Date.now() + Math.random()
+    setToasts(t => [...t, { id, message, kind }])
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 6000)
+  }, [])
+
+  /* ---------------- boot ---------------- */
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/access')
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked') })
+      .catch(() => { if (!cancelled) setGate('open') })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    // Corrupt storage used to throw here and blank the whole page.
+    try {
+      const saved = localStorage.getItem('soch_cms_persona')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object') setPersona(p => ({ ...p, ...parsed }))
+      }
+    } catch {
+      localStorage.removeItem('soch_cms_persona')
     }
-    const poll = setInterval(async ()=>{
-      try{
+  }, [])
+
+  /* ---------------- camera lifecycle ---------------- */
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    if (previewRef.current) previewRef.current.srcObject = null
+    setCamReady(false)
+  }, [])
+
+  // Release the camera the moment it stops being needed — leaving step 3 used to
+  // leave the recording indicator lit for the rest of the session.
+  useEffect(() => {
+    if (!(mode === 'pro' && step === 3)) stopCamera()
+  }, [mode, step, stopCamera])
+
+  useEffect(() => stopCamera, [stopCamera])
+
+  /* ---------------- avatar polling ---------------- */
+  useEffect(() => {
+    if (!avatarJobId) return
+    let attempts = 0
+
+    const poll = setInterval(async () => {
+      attempts++
+      if (attempts > AVATAR_MAX_POLLS) {
+        clearInterval(poll)
+        setAvatarJobId('')
+        setAvatarError('Gave up waiting for HeyGen after 10 minutes. The job may still finish — check your HeyGen dashboard.')
+        return
+      }
+      try {
         const res = await fetch('/api/generate-avatar', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({action: 'status', jobId: avatarJobId})
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status', jobId: avatarJobId })
         })
         const data = await res.json()
-        if(data.status === 'completed' && data.videoUrl){
+        if (data.status === 'completed' && data.videoUrl) {
+          clearInterval(poll)
           setAvatarResult(data)
           setAvatarJobId('')
-          if(avatarPollRef.current) clearInterval(avatarPollRef.current)
-          trackAnalytics('avatar_generated', {status: 'success'})
-        } else if(data.status === 'failed'){
-          setAvatarError('HeyGen generation failed: '+(data.failureMessage || 'unknown error'))
+          toast('Avatar video is ready.', 'ok')
+          trackAnalytics('avatar_generated', { status: 'success' })
+        } else if (data.status === 'failed') {
+          clearInterval(poll)
+          setAvatarError('HeyGen generation failed: ' + (data.failureMessage || 'unknown error'))
           setAvatarJobId('')
-          if(avatarPollRef.current) clearInterval(avatarPollRef.current)
-          trackAnalytics('avatar_generated', {status: 'error', error: data.failureMessage})
+          trackAnalytics('avatar_generated', { status: 'error', error: data.failureMessage })
         }
-      }catch(err){
+      } catch (err) {
         console.error('Avatar status check failed:', err)
       }
-    }, 5000)
-    avatarPollRef.current = poll
-    return ()=>clearInterval(poll)
-  }, [avatarJobId])
+    }, AVATAR_POLL_MS)
 
-  const trackAnalytics = async (type, data = {})=>{
-    try{
+    return () => clearInterval(poll)
+  }, [avatarJobId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---------------- data helpers ---------------- */
+  const trackAnalytics = async (type, data = {}) => {
+    try {
       await fetch('/api/analytics', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({action: 'track', event: {type, ...data}})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'track', event: { type, ...data } })
       })
-    }catch(err){
+    } catch (err) {
       console.error('Analytics tracking failed:', err)
     }
   }
 
-  const fetchAnalytics = async ()=>{
-    try{
-      const res = await fetch('/api/analytics?action=report')
-      const data = await res.json()
-      setAnalytics(data)
-    }catch(err){
-      console.error('Failed to fetch analytics:', err)
+  const fetchAnalytics = async () => {
+    try {
+      const res = await fetch('/api/analytics')
+      setAnalytics(await res.json())
+    } catch (err) {
+      toast('Could not load activity.')
     }
   }
 
-  const savePersona = ()=>{
-    localStorage.setItem('soch_cms_persona', JSON.stringify(persona))
-    trackAnalytics('creator_created', {name: persona.name, niche: persona.niche})
+  const clearAnalytics = async () => {
+    try {
+      // POST, not GET — a destructive action must never be reachable by navigation.
+      await fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' })
+      })
+      setAnalytics(null)
+      fetchAnalytics()
+      toast('Activity cleared.', 'ok')
+    } catch {
+      toast('Could not clear activity.')
+    }
+  }
+
+  const copy = async (value) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast('Copied to clipboard.', 'ok')
+    } catch {
+      toast('Clipboard is blocked in this browser.')
+    }
+  }
+
+  const savePersona = () => {
+    try {
+      localStorage.setItem('soch_cms_persona', JSON.stringify(persona))
+    } catch {
+      // Private-mode Safari and full quotas both throw. Not worth blocking on.
+    }
+    trackAnalytics('creator_created', { name: persona.name, niche: persona.niche })
     setStep(2)
   }
 
-  const startCam = async ()=>{
-    try{
-      const s = await navigator.mediaDevices.getUserMedia({video:true, audio:true})
-      if(previewRef.current) previewRef.current.srcObject = s
-      window._stream = s
+  const startCam = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      streamRef.current = s
+      if (previewRef.current) previewRef.current.srcObject = s
       setCamReady(true)
-    }catch(err){
-      alert('Could not access camera/mic: '+err.message+'. Please allow permission and try again.')
+    } catch (err) {
+      toast('Could not access camera and mic: ' + err.message)
     }
   }
 
-  const recordVoice = async (type)=>{
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true})
+  const recordVoice = async (type) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const rec = new MediaRecorder(stream)
-      let chunks=[]
-      rec.ondataavailable = e=>chunks.push(e.data)
-      rec.onstop = ()=>{
-        const blob = new Blob(chunks, {type:'audio/webm'})
+      let chunks = []
+      rec.ondataavailable = e => chunks.push(e.data)
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' })
         const url = URL.createObjectURL(blob)
-        setVoices(v=>[...v, {type, url, blob}])
-        stream.getTracks().forEach(t=>t.stop())
+        setVoices(v => [...v.filter(x => x.type !== type), { type, url, blob }])
+        stream.getTracks().forEach(t => t.stop())
       }
       rec.start()
       setRecording(true)
-      setTimeout(()=>{rec.stop(); setRecording(false)}, 5000)
-    }catch(err){
-      alert('Could not access microphone: '+err.message+'. Please allow permission and try again.')
+      setTimeout(() => { rec.stop(); setRecording(false) }, 5000)
+    } catch (err) {
+      toast('Could not access the microphone: ' + err.message)
     }
   }
 
-  const recordVideo = async ()=>{
-    try{
-      const stream = window._stream || await navigator.mediaDevices.getUserMedia({video:true, audio:true})
-      window._stream = stream
-      if(stream.getAudioTracks().length === 0){
-        alert('No microphone track found. Reload and allow both camera and microphone so your voice is captured with the gesture.')
+  const recordVideo = async () => {
+    try {
+      let stream = streamRef.current
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        streamRef.current = stream
+        if (previewRef.current) previewRef.current.srcObject = stream
+        setCamReady(true)
+      }
+      if (stream.getAudioTracks().length === 0) {
+        toast('No microphone track found. Allow both camera and mic so your voice is captured with the gesture.')
         return
       }
       const gesture = activeGesture
       const rec = new MediaRecorder(stream)
-      let chunks=[]
-      rec.ondataavailable = e=>chunks.push(e.data)
-      rec.onstop = ()=>{
-        const blob = new Blob(chunks, {type:'video/webm'})
-        const url = URL.createObjectURL(blob)
-        setVideos(v=>[...v, {url, blob, gesture}])
+      let chunks = []
+      rec.ondataavailable = e => chunks.push(e.data)
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' })
+        setVideos(v => [...v, { url: URL.createObjectURL(blob), blob, gesture }])
       }
       rec.start()
       setRecording(true)
-      setTimeout(()=>{rec.stop(); setRecording(false)}, 5000)
-    }catch(err){
-      alert('Could not access camera: '+err.message+'. Please allow permission and try again.')
+      setTimeout(() => { rec.stop(); setRecording(false) }, 5000)
+    } catch (err) {
+      toast('Could not record: ' + err.message)
     }
   }
 
-  const generateBasicPack = async ()=>{
-    if(!basicPrompt.trim()){
+  const generateBasicPack = async () => {
+    if (!basicPrompt.trim()) {
       setBasicError('Please enter a content idea or topic')
       return
     }
     setBasicGenerating(true)
     setBasicError('')
     setBasicResult(null)
-    try{
+    try {
       const res = await fetch('/api/generate-basic-pack', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({prompt: basicPrompt})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: basicPrompt })
       })
       const data = await res.json()
-      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
+      if (res.status === 401) { setGate('locked'); return }
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
-      trackAnalytics('basic_pack_generated', {source: data.source})
-    }catch(err){
+      trackAnalytics('basic_pack_generated', { source: data.source })
+    } catch (err) {
       setBasicError(err.message)
-      trackAnalytics('basic_pack_generated', {status: 'error', error: err.message})
-    }finally{
+      trackAnalytics('basic_pack_generated', { status: 'error', error: err.message })
+    } finally {
       setBasicGenerating(false)
     }
   }
 
-  const generateContent = async ()=>{
+  const generateContent = async () => {
     setGenerating(true)
     setGenError('')
-    try{
+    try {
       const res = await fetch('/api/generate-content', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({persona})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persona })
       })
-      if(!res.ok) throw new Error('Server returned '+res.status)
       const data = await res.json()
+      if (res.status === 401) { setGate('locked'); return }
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setContent(data)
-      localStorage.setItem('soch_last_content', JSON.stringify(data))
-      trackAnalytics('content_generated', {source: data.source})
-    }catch(err){
-      setGenError('Could not generate content: '+err.message)
-      trackAnalytics('content_generated', {status: 'error', error: err.message})
-    }finally{
+      try { localStorage.setItem('soch_last_content', JSON.stringify(data)) } catch {}
+      trackAnalytics('content_generated', { source: data.source })
+    } catch (err) {
+      setGenError('Could not generate content: ' + err.message)
+      trackAnalytics('content_generated', { status: 'error', error: err.message })
+    } finally {
       setGenerating(false)
     }
   }
 
-  const generateAvatar = async ()=>{
-    if(!content) {
-      setAvatarError('Generate content first (Step 5)')
+  const generateAvatar = async () => {
+    if (!content) {
+      setAvatarError('Generate content in Step 5 first — the avatar reads from the English script.')
       return
     }
     setGeneratingAvatar(true)
     setAvatarError('')
     setAvatarResult(null)
     setAvatarJobId('')
-    try{
-      const voiceId = cloneResult?.voiceId
+    try {
       const res = await fetch('/api/generate-avatar', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'generate',
           script: content.englishVideo,
-          voiceId: voiceId || undefined
+          voiceId: cloneResult?.voiceId || undefined
         })
       })
       const data = await res.json()
-      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
+      if (res.status === 401) { setGate('locked'); return }
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setAvatarJobId(data.jobId)
-    }catch(err){
-      setAvatarError('Avatar generation failed: '+err.message)
-    }finally{
+    } catch (err) {
+      setAvatarError('Avatar generation failed: ' + err.message)
+    } finally {
       setGeneratingAvatar(false)
     }
   }
 
-  const cloneVoices = async ()=>{
-    if(voices.length === 0) {
+  const cloneVoices = async () => {
+    if (voices.length === 0) {
       setCloneError('Record at least one voice sample first')
       return
     }
     setCloning(true)
     setCloneError('')
     setCloneResult(null)
-    try{
-      const voiceSamples = await Promise.all(voices.map(async (v)=>{
+    try {
+      const voiceSamples = await Promise.all(voices.map(async v => {
         const buf = await v.blob.arrayBuffer()
-        return {type: v.type, data: Buffer.from(buf).toString('base64')}
+        let binary = ''
+        const bytes = new Uint8Array(buf)
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+        return { type: v.type, data: btoa(binary) }
       }))
       const res = await fetch('/api/clone-voice', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({voiceSamples, creatorName: persona.name || 'SochGuru'})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voiceSamples, creatorName: persona.name || 'SochGuru' })
       })
       const data = await res.json()
-      if(!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
+      if (res.status === 401) { setGate('locked'); return }
+      if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setCloneResult(data)
-      trackAnalytics('voice_cloned', {sampleCount: voices.length, status: 'success'})
-    }catch(err){
-      setCloneError('Voice cloning failed: '+err.message)
-      trackAnalytics('voice_cloned', {status: 'error', error: err.message})
-    }finally{
+      toast('Voice cloned.', 'ok')
+      trackAnalytics('voice_cloned', { sampleCount: voices.length, status: 'success' })
+    } catch (err) {
+      setCloneError('Voice cloning failed: ' + err.message)
+      trackAnalytics('voice_cloned', { status: 'error', error: err.message })
+    } finally {
       setCloning(false)
     }
   }
 
-  const publishToMeta = async ()=>{
-    if(!content) return
+  const publishToMeta = async () => {
+    if (!content) return
     setPublishing(true)
     setPubError('')
     setPubResult(null)
-    try{
+    try {
       const res = await fetch('/api/publish', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({pageId, content})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, content })
       })
       const data = await res.json()
-      if(!res.ok && !data.results) throw new Error(data.error || `Server returned ${res.status}`)
+      if (res.status === 401) { setGate('locked'); return }
+      if (!res.ok && !data.results) throw new Error(data.error || `Server returned ${res.status}`)
       setPubResult(data)
-      trackAnalytics('published', {status: data.status, postsCount: data.results?.length})
-    }catch(err){
-      setPubError('Publish failed: '+err.message)
-      trackAnalytics('published', {status: 'error', error: err.message})
-    }finally{
+      toast(data.status === 'success' ? 'Published to your Page.' : 'Published with some failures.', data.status === 'success' ? 'ok' : 'err')
+      trackAnalytics('published', { status: data.status, postsCount: data.results?.length })
+    } catch (err) {
+      setPubError('Publish failed: ' + err.message)
+      trackAnalytics('published', { status: 'error', error: err.message })
+    } finally {
       setPublishing(false)
     }
   }
 
-  const exportPackage = ()=>{
-    const pack = {creator: persona, voices: voices.length, videos: videos.length, pageId, content, timestamp: new Date().toISOString(), agentReady: true}
-    const blob = new Blob([JSON.stringify(pack, null, 2)], {type:'application/json'})
+  const download = (data, filename) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; a.download='SochGuru_CreatorPackage.json'; a.click()
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
-  if(!mode) return (
+  const exportPackage = () => {
+    download({
+      creator: persona,
+      voices: voices.length,
+      videos: videos.map(v => v.gesture),
+      content,
+      timestamp: new Date().toISOString()
+    }, 'SochGuru_CreatorPackage.json')
+    toast('Package downloaded.', 'ok')
+  }
+
+  /* ---------------- gate ---------------- */
+
+  if (gate === 'locked') {
+    return (
+      <>
+        <AccessGate onUnlock={() => setGate('open')} />
+        <Toasts items={toasts} dismiss={dismissToast} />
+      </>
+    )
+  }
+
+  /* ---------------- landing ---------------- */
+
+  if (!mode) return (
     <div className="min-h-screen">
       <div className="max-w-3xl mx-auto px-6">
 
-        {/* Hero */}
-        <section className="pt-24 pb-20">
+        {/* Hero — the CTA sits here, above the fold, not four sections down */}
+        <section className="pt-20 pb-16 md:pt-28">
           <p className="t-label mono mb-5">Hadigaun, Kathmandu</p>
           <h1 className="t-display mb-6">
             Write it once.<br/>
             Publish it in both<br/>
             <span style={{color:'var(--accent)'}}>Nepali and English.</span>
           </h1>
-          <h2 className="t-h2 mb-6" style={{color:'var(--ink-3)'}}>
+          <h2 className="t-h2 mb-7" style={{color:'var(--ink-3)'}} lang="ne-Latn">
             Ek choti likhe. Duwai bhashama publish garne.
           </h2>
-          <p className="t-lead max-w-xl">
-            Most tools make you pick a language. This one takes a single description
-            of your idea and returns the Nepali post, the English post, and the video
-            script for each — in one pass.
+
+          <p className="t-lead max-w-xl mb-9">
+            Describe your idea in one paragraph. Get back the Nepali post, the English
+            post, and a video script for each — written together, in one pass.
+          </p>
+
+          <button onClick={()=>setMode('basic')} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
+            Write my first post →
+          </button>
+
+          <p className="t-sm mono mt-4">
+            No signup · Runs on your own Gemini key · Nothing posts without you
           </p>
         </section>
 
-        {/* Who's building this */}
-        <section className="hairline py-16">
-          <div className="flex items-baseline justify-between gap-6 mb-8">
-            <p className="t-label mono">Who's building this</p>
-            <p className="t-label mono" style={{color:'var(--ink-3)'}}>Ko banayo yo?</p>
+        {/* Concrete payoff, immediately after the CTA */}
+        <section className="hairline py-14">
+          <div className="flex items-baseline justify-between gap-6 mb-7">
+            <p className="t-label mono">Six pieces, one prompt</p>
+            <p className="t-label mono" style={{color:'var(--ink-3)'}} lang="ne-Latn">Ek prompt, chhavta cheez</p>
           </div>
-          <div className="space-y-5 t-body" style={{color:'var(--ink-2)'}}>
+          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1">
+            {[
+              ['Nepali status', 'Romanized, reads like a real feed post'],
+              ['English status', 'Same idea, written for a global audience'],
+              ['Nepali video script', 'Hook, main, call-to-action'],
+              ['English video script', 'Hook, main, call-to-action'],
+              ['Image prompt', 'For a consistent avatar look'],
+              ['Video prompt', '8 seconds, 9:16 vertical']
+            ].map(([name, desc]) => (
+              <div key={name} className="py-3" style={{borderBottom:'1px solid var(--line)'}}>
+                <p className="text-sm font-medium mb-0.5">{name}</p>
+                <p className="t-sm">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* How it works — three beats, removes the "what happens if I click" hesitation */}
+        <section className="hairline py-14">
+          <p className="t-label mono mb-7">How it works</p>
+          <ol className="space-y-6">
+            {[
+              ['Describe your idea', 'A paragraph about who you are and what you are covering. The more specific, the less generic it comes back.'],
+              ['Read what comes back', 'Six drafts, side by side. Edit anything that does not sound like you.'],
+              ['Post it yourself', 'Copy what you want, or download the whole pack. Nothing publishes on its own.']
+            ].map(([title, body], i) => (
+              <li key={title} className="flex gap-4">
+                <span className="t-label mono shrink-0 pt-1" style={{color:'var(--accent)', width:'1.5rem'}}>0{i+1}</span>
+                <div>
+                  <p className="text-sm font-medium mb-1">{title}</p>
+                  <p className="t-body">{body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* Who's building this — the credibility that makes the rest believable */}
+        <section className="hairline py-14">
+          <div className="flex items-baseline justify-between gap-6 mb-7">
+            <p className="t-label mono">Who's building this</p>
+            <p className="t-label mono" style={{color:'var(--ink-3)'}} lang="ne-Latn">Ko banayo yo?</p>
+          </div>
+          <div className="space-y-5 t-body">
             <p style={{color:'var(--ink)', fontSize:'1.0625rem', lineHeight:1.6}}>
               I spent a decade in banking. Now I'm building with agentic AI from
               Hadigaun, and posting about it as I go.
             </p>
             <p>
-              The problem I kept hitting was simple. My audience is split — friends and
-              peers here who read Nepali, and a wider tech audience that reads English.
-              Writing for one meant the other got a rushed translation, or nothing.
-              Doing both properly meant doing every step twice: the script, the tone,
-              the recording, the edit.
+              My audience is split — friends and peers here who read Nepali, and a wider
+              tech audience that reads English. Writing for one meant the other got a
+              rushed translation, or nothing. Doing both properly meant doing every step
+              twice: the script, the tone, the recording, the edit.
             </p>
             <p>
               So I built the thing I needed. It's not a startup pitch. It's a tool I use
@@ -356,105 +672,56 @@ export default function Page() {
           </div>
         </section>
 
-        {/* What it actually does */}
-        <section className="hairline py-16">
-          <div className="flex items-baseline justify-between gap-6 mb-8">
-            <p className="t-label mono">What one prompt returns</p>
-            <p className="t-label mono" style={{color:'var(--ink-3)'}}>Ek prompt ko utput</p>
-          </div>
-          <div className="card divide-y" style={{borderColor:'var(--line)'}}>
-            {[
-              ['Nepali status', 'Short-form post, Romanized Nepali'],
-              ['English status', 'Same idea, written for a global feed'],
-              ['Nepali video script', 'Hook, main, call-to-action'],
-              ['English video script', 'Hook, main, call-to-action'],
-              ['Image prompt', 'For a consistent avatar look'],
-              ['Video prompt', '8s vertical, 9:16']
-            ].map(([name, desc]) => (
-              <div key={name} className="flex items-baseline justify-between gap-6 px-5 py-3.5" style={{borderColor:'var(--line)'}}>
-                <span className="text-sm font-medium">{name}</span>
-                <span className="t-sm text-right">{desc}</span>
-              </div>
-            ))}
-          </div>
-          <p className="t-sm mt-4">
-            You review and edit everything before it goes anywhere. Nothing publishes on its own.
-          </p>
-        </section>
-
-        {/* Two paths */}
-        <section className="hairline py-16">
-          <p className="t-label mono mb-8">Two ways in</p>
-          <div className="grid md:grid-cols-2 gap-4">
-
-            <div className="card p-6 flex flex-col">
-              <div className="flex items-center gap-2.5 mb-3">
-                <h2 className="t-h2">Basic</h2>
-                <span className="pill pill-muted mono">1 KEY</span>
-              </div>
-              <p className="t-body mb-6 flex-1">
-                Describe your idea in a paragraph. Get all six pieces back. Best when
-                you want to test an angle before committing to it.
-              </p>
-              <button onClick={()=>setMode('basic')} className="btn btn-primary w-full">
-                Start with a prompt
-              </button>
-              <p className="t-sm mono mt-3">Needs a Gemini key</p>
-            </div>
-
-            <div className="card p-6 flex flex-col opacity-60">
-              <div className="flex items-center gap-2.5 mb-3">
-                <h2 className="t-h2">Pro</h2>
-                <span className="pill pill-muted mono">COMING SOON</span>
-              </div>
-              <p className="t-body mb-6 flex-1">
-                Five steps: persona, your recorded voice, gestures, avatar video, then
-                content and publishing. Slower to set up, but the output sounds and
-                looks like you.
-              </p>
-              <button disabled className="btn btn-ghost w-full opacity-50 cursor-not-allowed">
-                Set up the full workflow
-              </button>
-              <p className="t-sm mono mt-3">Gemini · ElevenLabs · HeyGen · Meta</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Honest footer */}
-        <section className="hairline py-16">
+        {/* Worth knowing — objections answered before they're asked */}
+        <section className="hairline py-14">
           <p className="t-label mono mb-6">Worth knowing before you start</p>
           <div className="space-y-4 t-body">
             <p>
               <span style={{color:'var(--ink)'}}>Your API keys stay on the server.</span>{' '}
               They're read from environment variables and never sent to the browser.
-              Every call to Gemini, ElevenLabs, HeyGen, and Meta is billed to your own
-              account at their rates.
-            </p>
-            <p>
-              <span style={{color:'var(--ink)'}}>This app records what you do in it.</span>{' '}
-              Each step logs an event — persona saved, voice cloned, content generated,
-              post published — with a timestamp, so the analytics view can show you your
-              own activity. It's held in server memory and clears on restart. Nothing is
-              sold or sent anywhere else.
+              Every call is billed to your own account at their rates.
             </p>
             <p>
               <span style={{color:'var(--ink)'}}>The Nepali is Romanized, not Devanagari.</span>{' '}
               It reads naturally in a Facebook feed, but check it before posting — AI
               translation of Nepali idiom still gets things wrong.
             </p>
+            <p>
+              <span style={{color:'var(--ink)'}}>Nothing publishes on its own.</span>{' '}
+              You review and edit every piece, and you press the button.
+            </p>
           </div>
+        </section>
+
+        {/* Closing CTA — the second and last ask */}
+        <section className="hairline py-16">
+          <h2 className="t-h1 mb-4">Your next post, in both languages.</h2>
+          <p className="t-body mb-8 max-w-lg">
+            Takes one paragraph and about thirty seconds. If what comes back isn't
+            usable, you've lost a minute.
+          </p>
+          <button onClick={()=>setMode('basic')} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
+            Write my first post →
+          </button>
+          <p className="t-sm mt-6">
+            Pro — your recorded voice, gestures, and an avatar video —{' '}
+            <span className="mono" style={{color:'var(--ink-3)'}}>coming soon</span>.
+          </p>
         </section>
 
         <footer className="hairline py-10">
           <p className="t-sm mono">Built in Hadigaun, Kathmandu</p>
         </footer>
       </div>
+      <Toasts items={toasts} dismiss={dismissToast} />
     </div>
   )
 
+  /* ---------------- app shell ---------------- */
+
   return (
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
-      <header className="flex justify-between items-center gap-4 py-5 mb-8 hairline" style={{borderTop:'none', borderBottom:'1px solid var(--line)'}}>
+      <header className="flex justify-between items-center gap-4 py-5 mb-8" style={{borderBottom:'1px solid var(--line)'}}>
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={()=>setMode(null)} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
           <div className="min-w-0">
@@ -465,8 +732,8 @@ export default function Page() {
         </div>
         <button
           onClick={()=>{setShowAnalytics(!showAnalytics); if(!showAnalytics) fetchAnalytics()}}
-          className="btn btn-ghost shrink-0"
-          style={{padding:'0.5rem 0.875rem', fontSize:'0.8125rem'}}
+          className="btn btn-ghost btn-sm shrink-0"
+          aria-expanded={showAnalytics}
         >
           Activity
         </button>
@@ -475,13 +742,18 @@ export default function Page() {
       {mode==='pro' && (
         <>
           {/* Desktop: full step-pill row, tap any step to jump */}
-          <div className="hidden md:grid grid-cols-5 gap-2 mb-6">
+          <nav className="hidden md:grid grid-cols-5 gap-2 mb-6" aria-label="Workflow steps">
             {[1,2,3,4,5].map(n=>(
-              <button key={n} onClick={()=>setStep(n)} className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}>
+              <button
+                key={n}
+                onClick={()=>setStep(n)}
+                aria-current={step===n ? 'step' : undefined}
+                className={`${step===n?'orange':'glass'} py-2 rounded-full text-xs font-bold`}
+              >
                 {n}&nbsp;{STEP_NAMES[n-1]}
               </button>
             ))}
-          </div>
+          </nav>
 
           {/* Mobile: compact progress header — per-step Back/Next lives in each step body */}
           <div className="md:hidden mb-6">
@@ -489,12 +761,21 @@ export default function Page() {
               <span className="t-sm mono">Step {step} of 5</span>
               <span className="t-sm mono" style={{color:'var(--accent)'}}>{STEP_NAMES[step-1]}</span>
             </div>
-            <div style={{height:'3px', background:'var(--line)', borderRadius:'999px', overflow:'hidden'}}>
+            <div
+              role="progressbar"
+              aria-valuenow={step}
+              aria-valuemin={1}
+              aria-valuemax={5}
+              aria-label={`Step ${step} of 5: ${STEP_NAMES[step-1]}`}
+              style={{height:'3px', background:'var(--line)', borderRadius:'999px', overflow:'hidden'}}
+            >
               <div style={{height:'100%', width:`${(step/5)*100}%`, background:'var(--accent)', transition:'width .2s ease'}}/>
             </div>
           </div>
         </>
       )}
+
+      {/* ---------------- Basic ---------------- */}
 
       {mode==='basic' && (
         <div className="max-w-2xl mx-auto pb-16">
@@ -504,7 +785,9 @@ export default function Page() {
             The more specific, the less generic it comes back.
           </p>
 
+          <label htmlFor="basic-prompt" className="sr-only">Describe your content idea</label>
           <textarea
+            id="basic-prompt"
             value={basicPrompt}
             onChange={e=>setBasicPrompt(e.target.value)}
             placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
@@ -516,12 +799,14 @@ export default function Page() {
           </div>
 
           <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
-            {basicGenerating ? 'Writing your six pieces…' : 'Generate'}
+            {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
           </button>
 
-          {basicError && <div className="note note-err mt-4">{basicError}</div>}
+          {basicError && <div className="note note-err mt-4" role="alert">{basicError}</div>}
 
-          {basicResult && (
+          {basicGenerating && <GeneratingSkeleton />}
+
+          {basicResult && !basicGenerating && (
             <div className="mt-10 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="t-label mono">Draft — review before posting</p>
@@ -547,373 +832,512 @@ export default function Page() {
                 ['Image prompt', basicResult.imagePrompt],
                 ['Video prompt', basicResult.veoPrompt]
               ].filter(([,v]) => v).map(([label, value]) => (
-                <div key={label} className="card p-5">
-                  <div className="flex items-center justify-between gap-4 mb-3">
-                    <p className="t-label mono">{label}</p>
-                    <button
-                      onClick={()=>navigator.clipboard?.writeText(value)}
-                      className="t-sm tap-link hover:opacity-70 transition shrink-0"
-                      style={{color:'var(--ink-3)'}}
-                    >Copy</button>
-                  </div>
-                  <p className="t-body whitespace-pre-wrap" style={{color:'var(--ink)'}}>{value}</p>
-                </div>
+                <ContentCard key={label} label={label} value={value} onCopy={()=>copy(value)} />
               ))}
 
-              <button
-                onClick={()=>{
-                  const blob = new Blob([JSON.stringify(basicResult, null, 2)], {type:'application/json'})
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url; a.download = 'sochguru-content-pack.json'; a.click()
-                  URL.revokeObjectURL(url)
-                  trackAnalytics('basic_pack_exported')
-                }}
-                className="btn btn-ghost w-full"
-              >
-                Download as JSON
-              </button>
+              <div className="space-y-2">
+                <p className="t-label mono">Export as</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => { download(basicResult, 'sochguru-content.json'); trackAnalytics('basic_pack_exported', {format:'json'}) }}
+                    className="btn btn-ghost btn-sm w-full"
+                  >
+                    JSON
+                  </button>
+                  <button
+                    onClick={() => {
+                      const csv = [['Field','Content'],...Object.entries(basicResult).map(([k,v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+                      const blob = new Blob([csv], {type:'text/csv'})
+                      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sochguru-content.csv'; a.click(); URL.revokeObjectURL(a.href)
+                      trackAnalytics('basic_pack_exported', {format:'csv'})
+                    }}
+                    className="btn btn-ghost btn-sm w-full"
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      const md = `# ${basicResult.persona?.name || 'Content Pack'}\n\n**Niche:** ${basicResult.persona?.niche}\n**Audience:** ${basicResult.persona?.audience}\n\n## Story\n${basicResult.persona?.story}\n\n## Nepali Status\n${basicResult.nepaliStatus}\n\n## English Status\n${basicResult.englishStatus}\n\n## Nepali Video Script\n${basicResult.nepaliVideo}\n\n## English Video Script\n${basicResult.englishVideo}\n\n## Image Prompt\n${basicResult.imagePrompt}\n\n## Video Prompt\n${basicResult.veoPrompt}`
+                      const blob = new Blob([md], {type:'text/markdown'})
+                      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sochguru-content.md'; a.click(); URL.revokeObjectURL(a.href)
+                      trackAnalytics('basic_pack_exported', {format:'markdown'})
+                    }}
+                    className="btn btn-ghost btn-sm w-full"
+                  >
+                    Markdown
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
       )}
 
+      {/* ---------------- Pro step 1: persona ---------------- */}
+
       {mode==='pro' && step===1 && (
-        <div className="space-y-6 max-w-4xl mx-auto">
-          <div className="glass rounded-2xl p-6">
-            <h2 className="text-2xl font-bold mb-2">✨ Define Your Creator Persona</h2>
-            <p className="text-sm text-gray-400 mb-6">This becomes your unique voice across all content. We'll use this to tailor everything: scripts, tone, avatar, and messaging.</p>
+        <div className="space-y-5 max-w-2xl mx-auto pb-16">
+          <div>
+            <h2 className="t-h1 mb-2">Define your persona</h2>
+            <p className="t-body">
+              This is the voice every later step writes from — the scripts, the tone,
+              the avatar. Specific beats polished.
+            </p>
+          </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-300 block mb-2">Your Name</label>
-                <input
-                  value={persona.name}
-                  onChange={e=>setPersona({...persona, name:e.target.value})}
-                  placeholder="e.g., Akash Rai"
-                  className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
-                />
-              </div>
+          <div className="card p-6 space-y-5">
+            <Labeled id="persona-name" label="Your name">
+              <input
+                id="persona-name"
+                value={persona.name}
+                onChange={e=>setPersona({...persona, name:e.target.value})}
+                placeholder="e.g. Akash Rai"
+                className="field"
+              />
+            </Labeled>
 
-              <div>
-                <label className="text-xs font-bold text-gray-300 block mb-2">Your Story (30 seconds to read)</label>
-                <textarea
-                  value={persona.story}
-                  onChange={e=>setPersona({...persona, story:e.target.value})}
-                  placeholder="Share your background, journey, and what drives you. Be authentic..."
-                  className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm h-24 focus:border-orange-500 outline-none transition"
-                />
-              </div>
+            <Labeled id="persona-story" label="Your story" hint="About 30 seconds to read. Background, journey, what drives you.">
+              <textarea
+                id="persona-story"
+                value={persona.story}
+                onChange={e=>setPersona({...persona, story:e.target.value})}
+                className="field"
+                style={{height:'8rem', lineHeight:1.6, resize:'vertical'}}
+              />
+            </Labeled>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-300 block mb-2">Niche / Topic</label>
-                  <select
-                    value={persona.niche}
-                    onChange={e=>setPersona({...persona, niche:e.target.value})}
-                    className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
-                  >
-                    <option>Agentic AI</option>
-                    <option>Mindset</option>
-                    <option>Culture Nepal</option>
-                    <option>Business</option>
-                    <option>Tech</option>
-                    <option>Design</option>
-                    <option>Marketing</option>
-                  </select>
-                </div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Labeled id="persona-niche" label="Niche">
+                <select
+                  id="persona-niche"
+                  value={persona.niche}
+                  onChange={e=>setPersona({...persona, niche:e.target.value})}
+                  className="field"
+                >
+                  {['Agentic AI','Mindset','Culture Nepal','Business','Tech','Design','Marketing'].map(o=>(
+                    <option key={o}>{o}</option>
+                  ))}
+                </select>
+              </Labeled>
 
-                <div>
-                  <label className="text-xs font-bold text-gray-300 block mb-2">Your Audience</label>
-                  <select
-                    value={persona.audience}
-                    onChange={e=>setPersona({...persona, audience:e.target.value})}
-                    className="w-full bg-black border border-gray-700 rounded-lg p-3 text-sm focus:border-orange-500 outline-none transition"
-                  >
-                    <option>Both Bilingual (Native+Foreign)</option>
-                    <option>Native Nepali</option>
-                    <option>Foreign Global</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 bg-black rounded-lg p-4 border border-gray-700">
-              <p className="text-xs text-gray-400 mb-3">💡 How this is used:</p>
-              <ul className="space-y-2 text-xs text-gray-300">
-                <li>✓ Voice Clone Agent learns your unique tone & delivery</li>
-                <li>✓ Content Agent writes from your perspective</li>
-                <li>✓ Avatar Agent creates videos that look like you</li>
-              </ul>
+              <Labeled id="persona-audience" label="Audience">
+                <select
+                  id="persona-audience"
+                  value={persona.audience}
+                  onChange={e=>setPersona({...persona, audience:e.target.value})}
+                  className="field"
+                >
+                  <option>Both Bilingual (Native+Foreign)</option>
+                  <option>Native Nepali</option>
+                  <option>Foreign Global</option>
+                </select>
+              </Labeled>
             </div>
           </div>
 
+          <div className="card p-5">
+            <p className="t-label mono mb-3">How this gets used</p>
+            <ul className="space-y-2 t-body">
+              <li>The voice clone learns your tone and delivery</li>
+              <li>Content is written from your perspective, not a generic one</li>
+              <li>The avatar video is built to match how you present</li>
+            </ul>
+          </div>
+
           <div className="flex gap-3">
-            <button onClick={()=>setMode(null)} className="glass flex-1 py-3 rounded-xl font-bold">← Back to Modes</button>
-            <button onClick={savePersona} className="orange flex-1 py-3 rounded-xl font-bold">Continue to Voice →</button>
+            <button onClick={()=>setMode(null)} className="btn btn-ghost flex-1">← Back</button>
+            <button onClick={savePersona} className="btn btn-primary flex-1">Continue to voice →</button>
           </div>
         </div>
       )}
 
+      {/* ---------------- Pro step 2: voice ---------------- */}
+
       {mode==='pro' && step===2 && (
-        <div className="space-y-6 max-w-4xl mx-auto">
-          <div className="glass rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <h2 className="text-2xl font-bold flex-1">🎤 Record Your Voice</h2>
-              <span className="text-xs bg-orange-900 text-orange-100 px-3 py-1 rounded-full">{voices.length}/3 recorded</span>
+        <div className="space-y-5 max-w-3xl mx-auto pb-16">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="t-h1 mb-2">Record your voice</h2>
+              <p className="t-body">
+                Three short takes in different tones. All three are combined into one
+                voice clone — more material makes a better result than three separate ones.
+              </p>
             </div>
-            <p className="text-sm text-gray-400 mb-6">Record 3 voice samples in different tones. We'll clone your voice for all future videos.</p>
+            <span className="pill pill-muted mono shrink-0">{voices.length}/3</span>
+          </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
-              {[
-                {type: 'neutral', label: 'Neutral Tone', hint: 'Speak naturally, explain something', example: 'My decade in banking taught me...'},
-                {type: 'excited', label: 'Excited Tone', hint: 'Show enthusiasm and energy', example: 'Let\'s learn & grow together!'},
-                {type: 'nepali', label: 'Nepali Tone', hint: 'Natural Nepali (Romanized ok)', example: 'Soch yesto cha...'}
-              ].map(({type, label, hint, example}) => {
-                const recorded = voices.find(v => v.type === type)
-                return (
-                  <div key={type} className={`rounded-xl p-4 transition ${recording ? 'bg-gray-900' : 'bg-black border border-gray-700 hover:border-orange-500'}`}>
-                    <p className="font-bold text-sm mb-1">{label}</p>
-                    <p className="text-xs text-gray-500 mb-3">{hint}</p>
-                    <p className="text-xs text-cyan-400 italic mb-3 line-clamp-2">"{example}"</p>
-
-                    <button
-                      onClick={()=>recordVoice(type)}
-                      disabled={recording}
-                      className="orange w-full py-2 rounded-lg font-bold text-sm mb-2 disabled:opacity-50 transition hover:opacity-90"
-                    >
-                      {recording ? '● Recording 5s...' : recorded ? '✓ Re-record' : '● Record 5s'}
-                    </button>
-
-                    {recorded && (
-                      <div className="bg-green-900 bg-opacity-20 border border-green-700 rounded-lg p-2">
-                        <audio src={recorded.url} controls className="w-full h-7 text-xs"/>
-                      </div>
-                    )}
+          <div className="grid sm:grid-cols-3 gap-4">
+            {VOICE_TAKES.map(({type, label, hint, example}) => {
+              const recorded = voices.find(v => v.type === type)
+              return (
+                <div key={type} className={recorded ? 'card-hi p-4' : 'card p-4'}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-medium text-sm">{label}</p>
+                    {recorded && <span className="pill pill-ok mono">DONE</span>}
                   </div>
-                )
-              })}
-            </div>
+                  <p className="t-sm mb-3">{hint}</p>
+                  <p className="t-sm mb-4" style={{color:'var(--accent)'}}>"{example}"</p>
 
-            {voices.length > 0 && (
-              <div className="mt-6 space-y-3">
-                <div className="bg-black rounded-lg p-4 border border-gray-700">
-                  <p className="text-sm font-bold mb-2">📋 Summary</p>
-                  <div className="grid grid-cols-3 gap-3 text-xs">
-                    {['neutral', 'excited', 'nepali'].map(type => {
-                      const has = voices.find(v => v.type === type)
-                      return <div key={type} className={`p-2 rounded text-center ${has ? 'bg-green-900 text-green-100' : 'bg-gray-800 text-gray-400'}`}>{type.charAt(0).toUpperCase() + type.slice(1)} {has ? '✓' : '○'}</div>
-                    })}
-                  </div>
+                  <button
+                    onClick={()=>recordVoice(type)}
+                    disabled={recording}
+                    className="btn btn-ghost btn-sm w-full mb-2"
+                  >
+                    {recording ? 'Recording…' : recorded ? 'Re-record' : 'Record 5s'}
+                  </button>
+
+                  {recorded && <audio src={recorded.url} controls className="w-full mt-1" style={{height:'32px'}}/>}
                 </div>
+              )
+            })}
+          </div>
 
+          {voices.length > 0 && (
+            <div className="space-y-3">
+              <button
+                onClick={cloneVoices}
+                disabled={cloning || voices.length < 3}
+                className="btn btn-primary w-full"
+              >
+                {cloning ? <Pending label="Cloning your voice…" /> : 'Clone voice with ElevenLabs'}
+              </button>
+              {voices.length < 3 && (
+                <p className="t-sm text-center">Record all three takes to enable cloning.</p>
+              )}
+
+              {cloneError && <div className="note note-err" role="alert">{cloneError}</div>}
+
+              {cloneResult && (
+                <div className="note note-ok" role="status">
+                  <p className="font-medium mb-1">Voice cloned</p>
+                  <p className="mono" style={{fontSize:'0.75rem'}}>
+                    {cloneResult.sampleCount} samples · ID {cloneResult.voiceId}
+                  </p>
+                  {cloneResult.requiresVerification && (
+                    <p className="mt-2">ElevenLabs may require verification before this voice can generate audio.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(1)} className="btn btn-ghost flex-1">← Back</button>
+            <button onClick={()=>setStep(3)} className="btn btn-primary flex-1" disabled={voices.length < 3}>Next: video →</button>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- Pro step 3: gesture capture ---------------- */}
+
+      {mode==='pro' && step===3 && (
+        <div className="space-y-5 max-w-2xl mx-auto pb-16">
+          <div>
+            <h2 className="t-h1 mb-2">Video and gesture</h2>
+            <p className="t-body">
+              Pick a gesture, then record five seconds of yourself doing it{' '}
+              <span style={{color:'var(--ink)'}}>while speaking the line below</span> —
+              voice, movement, and expression are captured together in one clip.
+            </p>
+          </div>
+
+          <div className="card p-5">
+            <video
+              ref={previewRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full rounded-lg bg-black object-cover mb-4"
+              style={{aspectRatio:'16/10'}}
+            />
+
+            <div className="grid grid-cols-3 gap-2 mb-4" role="group" aria-label="Gesture">
+              {Object.keys(GESTURE_LINES).map(g=>(
                 <button
-                  onClick={cloneVoices}
-                  disabled={cloning || voices.length < 3}
-                  className="orange w-full py-3 rounded-xl font-bold disabled:opacity-50 transition"
+                  key={g}
+                  onClick={()=>setActiveGesture(g)}
+                  aria-pressed={activeGesture===g}
+                  className={`rounded-lg text-center text-xs transition ${activeGesture===g ? 'orange font-semibold' : 'card-hi'}`}
+                  style={{minHeight:'44px', padding:'0.5rem'}}
+                >{g}</button>
+              ))}
+            </div>
+
+            <div className="card-hi p-4 mb-4">
+              <p className="t-label mono mb-1.5">Say this while you {activeGesture.toLowerCase()}</p>
+              <p className="text-sm" style={{color:'var(--accent)'}}>"{GESTURE_LINES[activeGesture]}"</p>
+            </div>
+
+            {!camReady ? (
+              <button onClick={startCam} className="btn btn-ghost w-full">Start camera and mic</button>
+            ) : (
+              <div className="flex flex-col items-center gap-2.5">
+                <button
+                  onClick={recordVideo}
+                  disabled={recording}
+                  className={`record-btn ${recording ? 'rec-dot' : ''}`}
+                  aria-label={`Record ${activeGesture}, 5 seconds`}
                 >
-                  {cloning ? '⏳ Cloning your voice...' : '🎤 Clone Voices with ElevenLabs'}
+                  <span className="record-btn-dot" aria-hidden="true"/>
                 </button>
-
-                {cloneError && <p className="text-red-400 text-sm p-3 bg-red-900 bg-opacity-20 rounded-lg">{cloneError}</p>}
-
-                {cloneResult && (
-                  <div className="rounded-lg p-4 text-sm bg-green-900 bg-opacity-20 border border-green-700 text-green-100">
-                    <p className="font-bold mb-1">✓ Voice Cloned Successfully!</p>
-                    <p className="text-xs">{cloneResult.sampleCount} samples combined into one voice · ID: {cloneResult.voiceId}</p>
-                    {cloneResult.requiresVerification && <p className="text-xs mt-1 text-yellow-300">ElevenLabs may require verification before this voice can generate audio.</p>}
-                  </div>
-                )}
+                <p className="t-sm" role="status">
+                  {recording ? 'Recording…' : `Tap to record "${activeGesture}" · 5s`}
+                </p>
               </div>
             )}
           </div>
 
-          <div className="flex gap-3">
-            <button onClick={()=>setStep(1)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
-            <button onClick={()=>setStep(3)} className="orange flex-1 py-3 rounded-xl font-bold" disabled={voices.length < 3}>Next: Video & Gesture →</button>
-          </div>
-        </div>
-      )}
-
-      {mode==='pro' && step===3 && (
-        <div className="glass rounded-2xl p-5">
-          <h2 className="font-bold mb-3">Step 3: Video + Gesture Capture {recording && <span className="text-red-400">● Recording</span>}</h2>
-          <p className="text-xs text-gray-400 mb-3">
-            Pick a gesture, then record 5 seconds of yourself doing it <span className="text-white">while speaking the line below</span> —
-            voice, movement, and expression all get captured together in one clip.
-          </p>
-          <video ref={previewRef} autoPlay muted playsInline className="w-full h-48 bg-black rounded object-cover mb-3"/>
-
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs mb-3">
-            {Object.keys(GESTURE_LINES).map(g=>(
-              <button
-                key={g}
-                onClick={()=>setActiveGesture(g)}
-                className={`p-2 rounded text-center transition ${activeGesture===g ? 'orange font-bold' : 'bg-black hover:bg-zinc-900'}`}
-                style={{minHeight:'44px'}}
-              >{g}</button>
-            ))}
-          </div>
-
-          <div className="bg-black rounded p-3 mb-3">
-            <p className="text-xs text-gray-400 mb-1">Say this while you {activeGesture.toLowerCase()}:</p>
-            <p className="text-sm text-cyan-300">"{GESTURE_LINES[activeGesture]}"</p>
-          </div>
-
-          {!camReady && (
-            <button onClick={startCam} className="glass w-full px-4 py-2 rounded text-xs mb-3">Start Camera & Mic</button>
-          )}
-
-          {camReady && (
-            <div className="flex flex-col items-center gap-2 mb-3">
-              <button
-                onClick={recordVideo}
-                disabled={recording}
-                className={`record-btn ${recording ? 'rec-dot' : ''}`}
-                aria-label={`Record ${activeGesture}, 5 seconds`}
-              >
-                <span className="record-btn-dot"/>
-              </button>
-              <p className="text-xs text-gray-400">{recording ? 'Recording…' : `Tap to record “${activeGesture}” · 5s`}</p>
+          {videos.length > 0 && (
+            <div className="card p-5">
+              <p className="t-label mono mb-3">{videos.length} clip{videos.length===1?'':'s'} captured</p>
+              <div className="flex gap-3 flex-wrap">
+                {videos.map((v,i)=>(
+                  <div key={i}>
+                    <video src={v.url} controls className="w-28 rounded-lg bg-black" style={{aspectRatio:'16/10'}}/>
+                    <p className="t-sm mt-1 text-center">{v.gesture}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          <div className="flex gap-2 flex-wrap">
-            {videos.map((v,i)=>(
-              <div key={i} className="text-center">
-                <video src={v.url} controls className="w-32 h-20 rounded bg-black"/>
-                <p className="text-xs text-gray-400 mt-1">{v.gesture}</p>
-              </div>
-            ))}
-            <span className="text-xs text-gray-400 self-center">{videos.length} clips (video + voice)</span>
-          </div>
-
-          <div className="flex gap-3 mt-4">
-            <button onClick={()=>setStep(2)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
-            <button onClick={()=>setStep(4)} disabled={videos.length===0} className="orange flex-1 py-3 rounded-xl font-bold disabled:opacity-50">Save Video → Avatar</button>
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(2)} className="btn btn-ghost flex-1">← Back</button>
+            <button onClick={()=>setStep(4)} disabled={videos.length===0} className="btn btn-primary flex-1">Next: avatar →</button>
           </div>
         </div>
       )}
+
+      {/* ---------------- Pro step 4: avatar ---------------- */}
 
       {mode==='pro' && step===4 && (
-        <div className="glass rounded-2xl p-5">
-          <h2 className="font-bold mb-3">Step 4: Avatar Builder - Circuit-Brain</h2>
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-black rounded p-3">
-              <p className="text-xs text-gray-400">Collected:</p>
-              <p className="text-xs">Persona: {persona.name || 'SochGuru'} - {persona.niche}</p>
-              <p className="text-xs">Voice: {voices.length} samples{cloneResult?.status==='success' && ' ✓ Cloned'}</p>
-              <p className="text-xs">Video: {videos.length} gestures</p>
-              <p className="text-xs mt-2 text-cyan-400">Avatar Prompt:</p>
-              <textarea className="w-full bg-zinc-900 border border-gray-700 rounded p-2 text-xs h-20 mt-1" defaultValue={`Same 3D character, curly hair, navy hoodie with glowing circuit-brain logo CIRCUIT-BRAIN, Pixar style, futuristic office holographic charts, Hadigaun Kathmandu, ${persona.niche}`}/>
+        <div className="space-y-5 max-w-3xl mx-auto pb-16">
+          <div>
+            <h2 className="t-h1 mb-2">Build your avatar</h2>
+            <p className="t-body">
+              HeyGen renders a vertical video from the English script in step 5. Generate
+              content first if you haven't yet.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="card p-5">
+              <p className="t-label mono mb-3">Collected so far</p>
+              <dl className="space-y-2 t-body">
+                <div className="flex justify-between gap-4">
+                  <dt>Persona</dt>
+                  <dd style={{color:'var(--ink)'}}>{persona.name || 'SochGuru'} · {persona.niche}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Voice</dt>
+                  <dd style={{color:'var(--ink)'}}>{voices.length} samples{cloneResult?.voiceId && ' · cloned'}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Gestures</dt>
+                  <dd style={{color:'var(--ink)'}}>{videos.length} clips</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Script</dt>
+                  <dd style={{color:'var(--ink)'}}>{content ? 'Ready' : 'Not generated'}</dd>
+                </div>
+              </dl>
             </div>
-            <div className="bg-black rounded p-3 space-y-2">
-              <p className="text-xs text-gray-400">Avatar Generation:</p>
-              <button onClick={generateAvatar} disabled={generatingAvatar || avatarJobId} className="orange w-full py-1 rounded text-xs disabled:opacity-50 font-bold">{avatarJobId ? '🎬 Generating (5s polls)…' : generatingAvatar ? 'Starting…' : '🎬 Generate with HeyGen'}</button>
-              {avatarError && <p className="text-red-400 text-xs">{avatarError}</p>}
+
+            <div className="card p-5 space-y-3">
+              <p className="t-label mono">Generate</p>
+              <button
+                onClick={generateAvatar}
+                disabled={generatingAvatar || !!avatarJobId}
+                className="btn btn-primary w-full"
+              >
+                {avatarJobId
+                  ? <Pending label="Rendering…" />
+                  : generatingAvatar ? <Pending label="Starting…" /> : 'Generate with HeyGen'}
+              </button>
+              {avatarJobId && <p className="t-sm" role="status">Checking every 5 seconds. This usually takes a few minutes.</p>}
+              {avatarError && <div className="note note-err" role="alert">{avatarError}</div>}
               {avatarResult?.videoUrl && (
-                <div className="bg-green-900 rounded p-2 text-xs text-green-100">
-                  <p className="font-bold">✓ Avatar Ready!</p>
-                  <video src={avatarResult.videoUrl} controls className="w-full mt-1 rounded"/>
+                <div className="space-y-2">
+                  <div className="note note-ok" role="status">Avatar ready</div>
+                  <video src={avatarResult.videoUrl} controls className="w-full rounded-lg"/>
                 </div>
               )}
             </div>
           </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={()=>setStep(3)} className="glass flex-1 py-3 rounded-xl font-bold">← Back</button>
-            <button onClick={()=>setStep(5)} className="orange flex-1 py-3 rounded-xl font-bold">Build Content Page →</button>
+
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(3)} className="btn btn-ghost flex-1">← Back</button>
+            <button onClick={()=>setStep(5)} className="btn btn-primary flex-1">Next: content →</button>
           </div>
         </div>
       )}
 
+      {/* ---------------- Pro step 5: content and publish ---------------- */}
+
       {mode==='pro' && step===5 && (
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="glass rounded-2xl p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <button onClick={()=>setStep(4)} className="t-sm tap-link hover:opacity-70 transition" style={{color:'var(--ink-3)'}}>← Back</button>
-              <h2 className="font-bold">Step 5: Content Management Tool</h2>
-            </div>
-            <input value={pageId} onChange={e=>setPageId(e.target.value)} placeholder="Page ID 61590521291901" className="w-full bg-black border border-gray-700 rounded p-2 mb-2 text-sm"/>
-            <button onClick={generateContent} disabled={generating} className="orange w-full py-2 rounded-xl font-bold disabled:opacity-50">{generating ? 'Generating…' : 'Generate Bilingual Pack'}</button>
-            {genError && <p className="text-red-400 text-xs mt-2">{genError}</p>}
-            {content && (
-              <div className="mt-3 space-y-2 text-xs">
-                <p className={content.source==='gemini' ? 'text-green-400' : 'text-yellow-400'}>
-                  {content.source==='gemini' ? '✨ Generated by Gemini' : '⚠ Template fallback (set GEMINI_API_KEY to use Gemini)'}
+        <div className="space-y-5 max-w-2xl mx-auto pb-16">
+          <div>
+            <h2 className="t-h1 mb-2">Content and publishing</h2>
+            <p className="t-body">
+              Generate the bilingual pack, read it through, then publish. Nothing goes
+              out until you press publish.
+            </p>
+          </div>
+
+          <div className="card p-5 space-y-4">
+            <Labeled
+              id="page-id"
+              label="Facebook Page ID"
+              hint="Leave blank if the server pins a page with META_PAGE_ID."
+            >
+              <input
+                id="page-id"
+                value={pageId}
+                onChange={e=>setPageId(e.target.value)}
+                placeholder="61590521291901"
+                inputMode="numeric"
+                className="field"
+              />
+            </Labeled>
+
+            <button onClick={generateContent} disabled={generating} className="btn btn-primary w-full">
+              {generating ? <Pending label="Generating…" /> : 'Generate bilingual pack'}
+            </button>
+            {genError && <div className="note note-err" role="alert">{genError}</div>}
+          </div>
+
+          {generating && <GeneratingSkeleton />}
+
+          {content && !generating && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="t-label mono">Draft — review before posting</p>
+                <span className={`pill mono ${content.source==='gemini' ? 'pill-accent' : 'pill-muted'}`}>
+                  {content.source==='gemini' ? 'GEMINI' : 'TEMPLATE'}
+                </span>
+              </div>
+
+              {content.source!=='gemini' && (
+                <div className="note note-warn" role="status">
+                  Using the built-in template. Set GEMINI_API_KEY on the server for generated content.
+                </div>
+              )}
+
+              {[
+                ['Nepali status', content.nepaliStatus],
+                ['English status', content.englishStatus],
+                ['Nepali video script', content.nepaliVideo],
+                ['English video script', content.englishVideo],
+                ['Image prompt', content.imagePrompt],
+                ['Video prompt', content.veoPrompt]
+              ].filter(([,v]) => v).map(([label, value]) => (
+                <ContentCard key={label} label={label} value={value} onCopy={()=>copy(value)} />
+              ))}
+
+              <div className="card p-5 space-y-3">
+                <p className="t-label mono">Publish</p>
+                <p className="t-sm">
+                  Posts the English and Nepali statuses to your Facebook Page as two separate posts.
                 </p>
-                <div className="bg-black rounded p-2"><p className="text-orange-400">Nepali Status (Native):</p><p>{content.nepaliStatus}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-cyan-400">English Video Script (Global 30s):</p><p className="whitespace-pre-wrap">{content.englishVideo}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-orange-400">English Status (Global):</p><p>{content.englishStatus}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-cyan-400">Nepali Video Script:</p><p className="whitespace-pre-wrap">{content.nepaliVideo}</p></div>
-                <div className="bg-black rounded p-2"><p>Image Prompt: {content.imagePrompt}</p><p className="mt-1">Veo Prompt: {content.veoPrompt}</p></div>
-                <button onClick={publishToMeta} disabled={publishing} className="orange w-full py-2 rounded-xl font-bold text-xs disabled:opacity-50 mt-2">{publishing ? 'Publishing…' : 'Publish to Meta/Facebook →'}</button>
-                {pubError && <p className="text-red-400 text-xs">{pubError}</p>}
+                <button onClick={publishToMeta} disabled={publishing} className="btn btn-primary w-full">
+                  {publishing ? <Pending label="Publishing…" /> : 'Publish to Facebook'}
+                </button>
+                {pubError && <div className="note note-err" role="alert">{pubError}</div>}
                 {pubResult && (
-                  <div className={`rounded p-2 text-xs ${pubResult.status==='success' ? 'bg-green-900 text-green-100' : 'bg-yellow-900 text-yellow-100'}`}>
-                    <p className="font-bold">{pubResult.status==='success' ? '✓ Published!' : '⚠ Partial publish'}</p>
-                    {pubResult.results?.map((r, i)=><p key={i}>{r.type}: {r.status} {r.id && `(ID: ${r.id})`} {r.error && `— ${r.error}`}</p>)}
+                  <div className={`note ${pubResult.status==='success' ? 'note-ok' : 'note-warn'}`} role="status">
+                    <p className="font-medium mb-1.5">
+                      {pubResult.status==='success' ? 'Published' : 'Partially published'}
+                    </p>
+                    {pubResult.results?.map((r, i)=>(
+                      <p key={i} className="mono" style={{fontSize:'0.75rem'}}>
+                        {r.type}: {r.status}{r.id && ` · ${r.id}`}{r.error && ` — ${r.error}`}
+                      </p>
+                    ))}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-          <div className="glass rounded-2xl p-5">
-            <h3 className="font-bold mb-2 text-xs">Deploy Whole Package to Vercel</h3>
-            <div className="bg-black rounded p-3 text-xs space-y-1">
-              <p>1. Push this folder to GitHub</p>
-              <p>2. vercel.com → New Project → Import GitHub</p>
-              <p>3. Env Vars: GEMINI_API_KEY, NEXT_PUBLIC_META_TOKEN</p>
-              <p>4. Deploy → Live CMS</p>
-              <p className="text-cyan-400 mt-2">Agent-Ready: Each step emits event</p>
-              <p>CreatorCreated → VoiceCloned → AvatarReady → ContentGenerated → Published</p>
+
+              <button onClick={exportPackage} className="btn btn-ghost w-full">
+                Export creator package as JSON
+              </button>
             </div>
-            <button onClick={exportPackage} className="glass w-full mt-3 py-2 rounded-xl text-xs">Export Creator Package JSON</button>
-            <a href="https://vercel.com/new" target="_blank" className="orange block text-center w-full mt-2 py-2 rounded-xl font-bold text-xs">Deploy to Vercel Now →</a>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={()=>setStep(4)} className="btn btn-ghost flex-1">← Back</button>
           </div>
         </div>
       )}
 
+      {/* ---------------- Activity ---------------- */}
+
       {showAnalytics && mode && (
-        <div className="glass rounded-2xl p-5 mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold">📊 Analytics Dashboard</h2>
-            <button onClick={()=>setShowAnalytics(false)} className="text-gray-400 text-xs tap-link">✕ Close</button>
+        <div className="card p-5 mt-6">
+          <div className="flex justify-between items-center mb-5">
+            <h2 className="t-h2">Activity</h2>
+            <button onClick={()=>setShowAnalytics(false)} className="t-sm tap-link hover:opacity-70 transition" style={{color:'var(--ink-3)'}}>Close</button>
           </div>
+
           {!analytics ? (
-            <p className="text-xs text-gray-400">Loading analytics...</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3" aria-hidden="true">
+              {[0,1,2,3].map(i => <div key={i} className="skeleton" style={{height:'68px'}}/>)}
+            </div>
           ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Total Events</p><p className="text-xl font-bold text-orange-400">{analytics.summary.totalEvents}</p></div>
-                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Success Rate</p><p className="text-xl font-bold text-green-400">{analytics.summary.successRate}%</p></div>
-                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Creators</p><p className="text-xl font-bold">{analytics.summary.creators}</p></div>
-                <div className="bg-black rounded p-3"><p className="text-xs text-gray-400">Published</p><p className="text-xl font-bold text-cyan-400">{analytics.summary.published}</p></div>
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  ['Total events', analytics.summary.totalEvents, 'var(--accent)'],
+                  ['Success rate', `${analytics.summary.successRate}%`, 'var(--ok)'],
+                  ['Creators', analytics.summary.creators, 'var(--ink)'],
+                  ['Published', analytics.summary.published, 'var(--ink)']
+                ].map(([label, value, color]) => (
+                  <div key={label} className="card-hi p-4">
+                    <p className="t-label mono mb-1.5">{label}</p>
+                    <p className="text-xl font-semibold" style={{color}}>{value}</p>
+                  </div>
+                ))}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                <div className="bg-black rounded p-2"><p className="text-gray-400">Voice Clones</p><p className="text-lg font-bold">{analytics.summary.voiceClones}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-gray-400">Avatars</p><p className="text-lg font-bold">{analytics.summary.avatarsGenerated}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-gray-400">Content</p><p className="text-lg font-bold">{analytics.summary.contentGenerated}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-gray-400">Errors</p><p className="text-lg font-bold text-red-400">{analytics.summary.errors}</p></div>
-                <div className="bg-black rounded p-2"><p className="text-gray-400">Avg Gen Time</p><p className="text-lg font-bold">{analytics.avgGenerationTime}ms</p></div>
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {[
+                  ['Voice clones', analytics.summary.voiceClones],
+                  ['Avatars', analytics.summary.avatarsGenerated],
+                  ['Content', analytics.summary.contentGenerated],
+                  ['Errors', analytics.summary.errors],
+                  ['Avg time', `${analytics.avgGenerationTime}ms`]
+                ].map(([label, value]) => (
+                  <div key={label} className="card-hi p-3">
+                    <p className="t-label mono mb-1">{label}</p>
+                    <p className="text-base font-semibold">{value}</p>
+                  </div>
+                ))}
               </div>
-              {analytics.recentEvents.length > 0 && (
-                <div className="bg-black rounded p-3">
-                  <p className="text-xs font-bold mb-2">Recent Events</p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
+
+              {analytics.recentEvents.length > 0 ? (
+                <div>
+                  <p className="t-label mono mb-2.5">Recent</p>
+                  <div className="space-y-1 max-h-52 overflow-y-auto">
                     {analytics.recentEvents.map((e, i)=>(
-                      <div key={i} className={`p-1 rounded flex justify-between ${e.status==='error' ? 'bg-red-900' : e.status==='success' ? 'bg-green-900' : 'bg-gray-800'}`}>
-                        <span>{e.type}</span>
-                        <span className="text-gray-400">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                      <div key={i} className="flex justify-between gap-4 px-3 py-2 rounded-lg card-hi">
+                        <span className="text-xs mono truncate">{e.type}</span>
+                        <span className="text-xs mono shrink-0" style={{color: e.status==='error' ? 'var(--err)' : 'var(--ink-3)'}}>
+                          {e.status==='error' ? 'error' : new Date(e.timestamp).toLocaleTimeString()}
+                        </span>
                       </div>
                     ))}
                   </div>
                 </div>
+              ) : (
+                <p className="t-sm">No activity recorded yet.</p>
               )}
-              <button onClick={async ()=>{await fetch('/api/analytics?action=clear'); setAnalytics(null)}} className="glass w-full py-1 rounded text-xs">Clear Analytics</button>
+
+              <button onClick={clearAnalytics} className="btn btn-danger btn-sm w-full">Clear activity</button>
             </div>
           )}
         </div>
       )}
+
+      <Toasts items={toasts} dismiss={dismissToast} />
     </div>
   )
 }
