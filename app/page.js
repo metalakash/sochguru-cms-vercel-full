@@ -184,6 +184,8 @@ export default function Page() {
   const [basicGenerating, setBasicGenerating] = useState(false)
   const [basicResult, setBasicResult] = useState(null)
   const [basicError, setBasicError] = useState('')
+  const [isPersonalizing, setIsPersonalizing] = useState(false)
+  const [personalization, setPersonalization] = useState({niche:'', intent:'', audience:'', contextStory:''})
 
   // Optimistically open so the hero paints immediately — a "Loading…" flash in
   // front of the CTA costs more than it buys. The landing page carries nothing
@@ -406,16 +408,23 @@ export default function Page() {
     setBasicError('')
     setBasicResult(null)
     try {
+      const payload = {
+        prompt: basicPrompt,
+        ...(personalization.niche && { niche: personalization.niche }),
+        ...(personalization.intent && { intent: personalization.intent }),
+        ...(personalization.audience && { audience: personalization.audience }),
+        ...(personalization.contextStory && { context: personalization.contextStory })
+      }
       const res = await fetch('/api/generate-basic-pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: basicPrompt })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (res.status === 401) { setGate('locked'); return }
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
-      trackAnalytics('basic_pack_generated', { source: data.source })
+      trackAnalytics('basic_pack_generated', { source: data.source, personalized: !!personalization.niche })
     } catch (err) {
       setBasicError(err.message)
       trackAnalytics('basic_pack_generated', { status: 'error', error: err.message })
@@ -798,9 +807,64 @@ export default function Page() {
             <span className="t-sm mono">{basicPrompt.trim().split(/\s+/).filter(Boolean).length} words</span>
           </div>
 
-          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
-            {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
-          </button>
+          <div className="space-y-4">
+            <button onClick={() => setIsPersonalizing(!isPersonalizing)} className="btn btn-ghost w-full">
+              {isPersonalizing ? '✕ Close personalization' : '✎ Personalize this'}
+            </button>
+
+            {isPersonalizing && (
+              <div className="card p-5 space-y-4 bg-gradient-to-br" style={{background:'linear-gradient(135deg, rgba(255,107,0,0.05), rgba(255,107,0,0.02))'}}>
+                <p className="t-label mono">4 quick questions for better results</p>
+
+                <Labeled id="basic-niche" label="Your niche" hint="e.g. AI, Banking, Creator economy, Health tech">
+                  <input
+                    id="basic-niche"
+                    value={personalization.niche}
+                    onChange={e=>setPersonalization({...personalization, niche:e.target.value})}
+                    placeholder="e.g. AI & Automation"
+                    className="field"
+                  />
+                </Labeled>
+
+                <Labeled id="basic-intent" label="What's your intent?" hint="Why are you posting this?">
+                  <div className="space-y-2">
+                    {['Share learning', 'Ask for help', 'Announce something', 'Educate', 'Inspire'].map(opt => (
+                      <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="intent" value={opt} checked={personalization.intent===opt} onChange={e=>setPersonalization({...personalization, intent:e.target.value})} className="w-4 h-4" />
+                        <span className="text-sm">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </Labeled>
+
+                <Labeled id="basic-audience" label="Your audience" hint="Who reads you?">
+                  <div className="space-y-2">
+                    {['Dev peers', 'Tech general', 'Business/Enterprise', 'Community/Niche', 'Mixed'].map(opt => (
+                      <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="audience" value={opt} checked={personalization.audience===opt} onChange={e=>setPersonalization({...personalization, audience:e.target.value})} className="w-4 h-4" />
+                        <span className="text-sm">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </Labeled>
+
+                <Labeled id="basic-context" label="Why now?" hint="What triggered this post? (optional)">
+                  <textarea
+                    id="basic-context"
+                    value={personalization.contextStory}
+                    onChange={e=>setPersonalization({...personalization, contextStory:e.target.value})}
+                    placeholder="e.g. Just launched a feature, solved a problem, had a realization..."
+                    className="field"
+                    style={{height:'5rem', resize:'vertical'}}
+                  />
+                </Labeled>
+              </div>
+            )}
+
+            <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
+              {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
+            </button>
+          </div>
 
           {basicError && <div className="note note-err mt-4" role="alert">{basicError}</div>}
 
