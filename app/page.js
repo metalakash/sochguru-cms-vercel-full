@@ -901,45 +901,45 @@ export default function Page() {
 
       {mode==='basic' && (
         <div className="max-w-2xl mx-auto pb-16">
-          <h2 className="t-h1 mb-3">What are you posting about?</h2>
-          <p className="t-body mb-6">
-            A paragraph is enough — who you are, what you're covering, who reads you.
-            The more specific, the less generic it comes back.
-          </p>
+          <div className="mb-8">
+            <h2 className="t-h1 mb-2">Tell your story</h2>
+            <p className="t-body" style={{color:'var(--ink-3)'}}>
+              Be honest. Your voice comes through better when you speak from what's actually happening.
+            </p>
+          </div>
 
-          <label htmlFor="basic-prompt" className="sr-only">Describe your content idea</label>
+          <label htmlFor="basic-prompt" className="sr-only">Your story</label>
           <textarea
             id="basic-prompt"
             value={basicPrompt}
             onChange={e=>setBasicPrompt(e.target.value)}
             placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
-            className="field mb-1"
-            style={{height:'9rem', lineHeight:1.6, resize:'vertical'}}
+            className="field mb-3"
+            style={{height:'12rem', lineHeight:1.6, resize:'vertical', fontSize:'1.05rem'}}
           />
-          <div className="flex justify-end mb-5">
+          <div className="flex justify-end mb-6">
             <span className="t-sm mono">{basicPrompt.trim().split(/\s+/).filter(Boolean).length} words</span>
           </div>
 
-          <div className="space-y-4">
-            <button onClick={() => setIsPersonalizing(!isPersonalizing)} className="btn btn-ghost w-full">
-              {isPersonalizing ? '✕ Close personalization' : '✎ Personalize this'}
-            </button>
+          {basicPrompt.trim().length > 30 && (
+            <div className="card p-5 mb-6 space-y-4 bg-gradient-to-br" style={{background:'linear-gradient(135deg, rgba(255,107,0,0.05), rgba(255,107,0,0.02))'}}>
+              <p className="t-label mono">Quick check-in</p>
+              <p className="t-body mb-4">Based on what you shared, a few follow-ups to make this better:</p>
 
-            {isPersonalizing && (
-              <div className="card p-5 space-y-4 bg-gradient-to-br" style={{background:'linear-gradient(135deg, rgba(255,107,0,0.05), rgba(255,107,0,0.02))'}}>
-                <p className="t-label mono">4 quick questions for better results</p>
-
-                <Labeled id="basic-niche" label="Your niche" hint="e.g. AI, Banking, Creator economy, Health tech">
+              {!personalization.niche && (
+                <Labeled id="basic-niche" label="What's your main topic?" hint="Keep it specific">
                   <input
                     id="basic-niche"
                     value={personalization.niche}
                     onChange={e=>setPersonalization({...personalization, niche:e.target.value})}
-                    placeholder="e.g. AI & Automation"
+                    placeholder="e.g. AI & Automation, Banking, Creator economy"
                     className="field"
                   />
                 </Labeled>
+              )}
 
-                <Labeled id="basic-intent" label="What's your intent?" hint="Why are you posting this?">
+              {!personalization.intent && (
+                <Labeled id="basic-intent" label="Why this post?" hint="What's the goal?">
                   <div className="space-y-2">
                     {['Share learning', 'Ask for help', 'Announce something', 'Educate', 'Inspire'].map(opt => (
                       <label key={opt} className="flex items-center gap-2 cursor-pointer">
@@ -949,8 +949,10 @@ export default function Page() {
                     ))}
                   </div>
                 </Labeled>
+              )}
 
-                <Labeled id="basic-audience" label="Your audience" hint="Who reads you?">
+              {!personalization.audience && (
+                <Labeled id="basic-audience" label="Who's reading?" hint="Who do you want to reach?">
                   <div className="space-y-2">
                     {['Dev peers', 'Tech general', 'Business/Enterprise', 'Community/Niche', 'Mixed'].map(opt => (
                       <label key={opt} className="flex items-center gap-2 cursor-pointer">
@@ -960,24 +962,13 @@ export default function Page() {
                     ))}
                   </div>
                 </Labeled>
+              )}
+            </div>
+          )}
 
-                <Labeled id="basic-context" label="Why now?" hint="What triggered this post? (optional)">
-                  <textarea
-                    id="basic-context"
-                    value={personalization.contextStory}
-                    onChange={e=>setPersonalization({...personalization, contextStory:e.target.value})}
-                    placeholder="e.g. Just launched a feature, solved a problem, had a realization..."
-                    className="field"
-                    style={{height:'5rem', resize:'vertical'}}
-                  />
-                </Labeled>
-              </div>
-            )}
-
-            <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
-              {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
-            </button>
-          </div>
+          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
+            {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
+          </button>
 
           {basicError && <div className="note note-err mt-4" role="alert">{basicError}</div>}
 
