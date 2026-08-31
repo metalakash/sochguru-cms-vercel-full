@@ -901,73 +901,118 @@ export default function Page() {
 
       {mode==='basic' && (
         <div className="max-w-2xl mx-auto pb-16">
-          <div className="mb-8">
-            <h2 className="t-h1 mb-2">Tell your story</h2>
-            <p className="t-body" style={{color:'var(--ink-3)'}}>
-              Be honest. Your voice comes through better when you speak from what's actually happening.
+          <div className="mb-10">
+            <h1 className="t-display mb-3">Your next idea</h1>
+            <p className="t-lead" style={{color:'var(--ink-3)'}}>
+              Write it honestly. The more authentic you sound, the better everything else becomes.
             </p>
           </div>
 
-          <label htmlFor="basic-prompt" className="sr-only">Your story</label>
-          <textarea
-            id="basic-prompt"
-            value={basicPrompt}
-            onChange={e=>setBasicPrompt(e.target.value)}
-            placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
-            className="field mb-3"
-            style={{height:'12rem', lineHeight:1.6, resize:'vertical', fontSize:'1.05rem'}}
-          />
-          <div className="flex justify-end mb-6">
-            <span className="t-sm mono">{basicPrompt.trim().split(/\s+/).filter(Boolean).length} words</span>
+          <div className="mb-8">
+            <label htmlFor="basic-prompt" className="t-label mono mb-3 block">Your story</label>
+            <textarea
+              id="basic-prompt"
+              value={basicPrompt}
+              onChange={e=>setBasicPrompt(e.target.value)}
+              placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
+              className="field"
+              style={{
+                height: '14rem',
+                lineHeight: 1.7,
+                resize: 'vertical',
+                fontSize: '1.0625rem',
+                padding: '1.5rem',
+                border: '2px solid var(--line)',
+                background: 'var(--bg)',
+                borderRadius: '12px'
+              }}
+            />
+            <div className="flex justify-between items-center mt-3">
+              <p className="t-sm" style={{color:'var(--ink-3)'}}>
+                {basicPrompt.trim().split(/\s+/).filter(Boolean).length === 0
+                  ? 'Start typing your idea…'
+                  : basicPrompt.trim().split(/\s+/).filter(Boolean).length < 30
+                    ? `${basicPrompt.trim().split(/\s+/).filter(Boolean).length} words — keep going`
+                    : `${basicPrompt.trim().split(/\s+/).filter(Boolean).length} words — perfect`}
+              </p>
+              <span className="t-sm mono" style={{color:'var(--ink-3)'}}>
+                {Math.round((basicPrompt.trim().split(/\s+/).filter(Boolean).length / 100) * 100)}%
+              </span>
+            </div>
           </div>
 
           {basicPrompt.trim().length > 30 && (
-            <div className="card p-5 mb-6 space-y-4 bg-gradient-to-br" style={{background:'linear-gradient(135deg, rgba(255,107,0,0.05), rgba(255,107,0,0.02))'}}>
-              <p className="t-label mono">Quick check-in</p>
-              <p className="t-body mb-4">Based on what you shared, a few follow-ups to make this better:</p>
+            <div className="mb-8 space-y-5 animate-in" style={{animationDuration:'300ms'}}>
+              <div className="border-t border-b border-line py-4">
+                <p className="t-label mono mb-4">Just a couple more things</p>
+                <p className="t-body mb-5" style={{color:'var(--ink-3)'}}>Based on what you shared:</p>
+              </div>
 
               {!personalization.niche && (
-                <Labeled id="basic-niche" label="What's your main topic?" hint="Keep it specific">
+                <div className="space-y-2">
+                  <label htmlFor="basic-niche" className="text-sm font-medium block">What's your topic? <span style={{color:'var(--ink-3)'}}>— keep it specific</span></label>
                   <input
                     id="basic-niche"
                     value={personalization.niche}
                     onChange={e=>setPersonalization({...personalization, niche:e.target.value})}
-                    placeholder="e.g. AI & Automation, Banking, Creator economy"
+                    placeholder="AI & Automation, Banking, Creator economy…"
                     className="field"
+                    style={{borderRadius:'8px'}}
                   />
-                </Labeled>
+                </div>
               )}
 
               {!personalization.intent && (
-                <Labeled id="basic-intent" label="Why this post?" hint="What's the goal?">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">What's your goal? <span style={{color:'var(--ink-3)'}}>— what do you want them to do</span></p>
                   <div className="space-y-2">
-                    {['Share learning', 'Ask for help', 'Announce something', 'Educate', 'Inspire'].map(opt => (
-                      <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="intent" value={opt} checked={personalization.intent===opt} onChange={e=>setPersonalization({...personalization, intent:e.target.value})} className="w-4 h-4" />
+                    {['Share learning', 'Ask for help', 'Announce something', 'Educate', 'Inspire'].map((opt, idx) => (
+                      <label key={opt} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-900 cursor-pointer transition">
+                        <input
+                          type="radio"
+                          name="intent"
+                          value={opt}
+                          checked={personalization.intent===opt}
+                          onChange={e=>setPersonalization({...personalization, intent:e.target.value})}
+                          className="w-4 h-4"
+                        />
                         <span className="text-sm">{opt}</span>
                       </label>
                     ))}
                   </div>
-                </Labeled>
+                </div>
               )}
 
               {!personalization.audience && (
-                <Labeled id="basic-audience" label="Who's reading?" hint="Who do you want to reach?">
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Who are you reaching? <span style={{color:'var(--ink-3)'}}>— who reads you most</span></p>
                   <div className="space-y-2">
                     {['Dev peers', 'Tech general', 'Business/Enterprise', 'Community/Niche', 'Mixed'].map(opt => (
-                      <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="audience" value={opt} checked={personalization.audience===opt} onChange={e=>setPersonalization({...personalization, audience:e.target.value})} className="w-4 h-4" />
+                      <label key={opt} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-900 cursor-pointer transition">
+                        <input
+                          type="radio"
+                          name="audience"
+                          value={opt}
+                          checked={personalization.audience===opt}
+                          onChange={e=>setPersonalization({...personalization, audience:e.target.value})}
+                          className="w-4 h-4"
+                        />
                         <span className="text-sm">{opt}</span>
                       </label>
                     ))}
                   </div>
-                </Labeled>
+                </div>
               )}
             </div>
           )}
 
-          <button onClick={generateBasicPack} disabled={basicGenerating || !basicPrompt.trim()} className="btn btn-primary w-full">
-            {basicGenerating ? <Pending label="Writing your six pieces…" /> : 'Generate'}
+          <button
+            onClick={generateBasicPack}
+            disabled={basicGenerating || !basicPrompt.trim()}
+            className="btn btn-primary w-full"
+            style={{height:'3rem', fontSize:'1rem', fontWeight:'600'}}
+          >
+            {basicGenerating ? <Pending label="Writing your six pieces…" /> : '✨ Generate'}
           </button>
 
           {basicError && <div className="note note-err mt-4" role="alert">{basicError}</div>}
