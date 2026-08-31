@@ -187,6 +187,11 @@ export default function Page() {
   const [isPersonalizing, setIsPersonalizing] = useState(false)
   const [personalization, setPersonalization] = useState({niche:'', intent:'', audience:'', contextStory:''})
 
+  // Memory management
+  const [memory, setMemory] = useState([])
+  const [showMemory, setShowMemory] = useState(false)
+  const [basicRating, setBasicRating] = useState(0)
+
   // Optimistically open so the hero paints immediately — a "Loading…" flash in
   // front of the CTA costs more than it buys. The landing page carries nothing
   // sensitive, and every API route enforces the gate server-side regardless.
@@ -222,6 +227,8 @@ export default function Page() {
     } catch {
       localStorage.removeItem('soch_cms_persona')
     }
+    // Load memory on mount
+    loadMemory()
   }, [])
 
   /* ---------------- camera lifecycle ---------------- */
@@ -293,6 +300,105 @@ export default function Page() {
     } catch (err) {
       console.error('Analytics tracking failed:', err)
     }
+  }
+
+  /* memory management for RAG learning */
+  const saveToMemory = (interaction) => {
+    try {
+      const entry = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        mode: interaction.mode,
+        prompt: interaction.prompt,
+        personalization: interaction.personalization,
+        result: interaction.result,
+        rating: 0,
+        notes: ''
+      }
+      const updated = [entry, ...memory.slice(0, 49)]
+      setMemory(updated)
+      localStorage.setItem('soch_memory', JSON.stringify(updated))
+      return entry
+    } catch (err) {
+      console.error('Memory save failed:', err)
+    }
+  }
+
+  const loadMemory = () => {
+    try {
+      const stored = localStorage.getItem('soch_memory')
+      if (stored) setMemory(JSON.parse(stored))
+    } catch (err) {
+      console.error('Memory load failed:', err)
+    }
+  }
+
+  const rateInteraction = (id, rating) => {
+    const updated = memory.map(m => m.id === id ? {...m, rating} : m)
+    setMemory(updated)
+    localStorage.setItem('soch_memory', JSON.stringify(updated))
+  }
+
+  const exportMemory = () => {
+    const data = JSON.stringify(memory, null, 2)
+    const blob = new Blob([data], {type:'application/json'})
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `sochguru-memory-${new Date().toISOString().split('T')[0]}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    toast('Memory exported', 'ok')
+  }
+
+  const importMemory = (file) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const imported = JSON.parse(e.target.result)
+        if (Array.isArray(imported)) {
+          const merged = [...imported, ...memory].slice(0, 50)
+          setMemory(merged)
+          localStorage.setItem('soch_memory', JSON.stringify(merged))
+          toast('Memory imported', 'ok')
+        } else {
+          toast('Invalid memory file format')
+        }
+      } catch (err) {
+        toast('Could not parse memory file')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const clearMemory = () => {
+    if (confirm('Clear all stored interactions? This cannot be undone.')) {
+      setMemory([])
+      localStorage.removeItem('soch_memory')
+      toast('Memory cleared', 'ok')
+    }
+  }
+
+  const deleteMemoryItem = (id) => {
+    const updated = memory.filter(m => m.id !== id)
+    setMemory(updated)
+    localStorage.setItem('soch_memory', JSON.stringify(updated))
+  }
+
+  const getMemoryStats = () => {
+    if (memory.length === 0) return null
+    const niches = {}
+    const intents = {}
+    const audiences = {}
+    memory.forEach(m => {
+      if (m.personalization?.niche) niches[m.personalization.niche] = (niches[m.personalization.niche] || 0) + 1
+      if (m.personalization?.intent) intents[m.personalization.intent] = (intents[m.personalization.intent] || 0) + 1
+      if (m.personalization?.audience) audiences[m.personalization.audience] = (audiences[m.personalization.audience] || 0) + 1
+    })
+    const topNiche = Object.entries(niches).sort((a,b) => b[1] - a[1])[0]
+    const topIntent = Object.entries(intents).sort((a,b) => b[1] - a[1])[0]
+    const topAudience = Object.entries(audiences).sort((a,b) => b[1] - a[1])[0]
+    const avgRating = memory.reduce((sum, m) => sum + m.rating, 0) / memory.length || 0
+    return { topNiche: topNiche?.[0], topIntent: topIntent?.[0], topAudience: topAudience?.[0], avgRating }
   }
 
   const fetchAnalytics = async () => {
@@ -424,6 +530,8 @@ export default function Page() {
       if (res.status === 401) { setGate('locked'); return }
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
+      setBasicRating(0)
+      saveToMemory({ mode: 'basic', prompt: basicPrompt, personalization, result: data })
       trackAnalytics('basic_pack_generated', { source: data.source, personalized: !!personalization.niche })
     } catch (err) {
       setBasicError(err.message)
@@ -718,8 +826,13 @@ export default function Page() {
           </p>
         </section>
 
-        <footer className="hairline py-10">
+        <footer className="hairline py-10 flex items-center justify-between">
           <p className="t-sm mono">Built in Hadigaun, Kathmandu</p>
+          {memory.length > 0 && (
+            <button onClick={() => setShowMemory(true)} className="tap-link text-xs">
+              📚 Memory ({memory.length})
+            </button>
+          )}
         </footer>
       </div>
       <Toasts items={toasts} dismiss={dismissToast} />
@@ -899,6 +1012,38 @@ export default function Page() {
                 <ContentCard key={label} label={label} value={value} onCopy={()=>copy(value)} />
               ))}
 
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="t-label mono">How was this?</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const entry = memory.find(m => m.result === basicResult)
+                        if (entry) rateInteraction(entry.id, 1)
+                        setBasicRating(1)
+                        toast('Saved — helps us learn', 'ok')
+                      }}
+                      className={`text-xl p-2 hover:scale-110 transition ${basicRating === 1 ? 'opacity-100' : 'opacity-50'}`}
+                      title="Good result"
+                    >
+                      👍
+                    </button>
+                    <button
+                      onClick={() => {
+                        const entry = memory.find(m => m.result === basicResult)
+                        if (entry) rateInteraction(entry.id, -1)
+                        setBasicRating(-1)
+                        toast('Noted — we\'ll improve', 'ok')
+                      }}
+                      className={`text-xl p-2 hover:scale-110 transition ${basicRating === -1 ? 'opacity-100' : 'opacity-50'}`}
+                      title="Needs work"
+                    >
+                      👎
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <p className="t-label mono">Export as</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -933,6 +1078,88 @@ export default function Page() {
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ---------------- Memory dashboard ---------------- */}
+
+      {showMemory && (
+        <div className="max-w-3xl mx-auto pb-16">
+          <div className="mb-8">
+            <button onClick={() => setShowMemory(false)} className="tap-link mb-4">← Back</button>
+            <h2 className="t-h1 mb-2">Your Memory</h2>
+            <p className="t-body mb-6">Stored interactions help us learn your style and preferences.</p>
+          </div>
+
+          {memory.length === 0 ? (
+            <div className="card p-6 text-center">
+              <p className="t-body" style={{color:'var(--ink-3)'}}>No interactions yet. Generate some content to build your memory.</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4 mb-10">
+                <div className="card p-5 space-y-3">
+                  <p className="t-label mono">Patterns detected</p>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {(() => {
+                      const stats = getMemoryStats()
+                      return (
+                        <>
+                          {stats.topNiche && <div><p className="text-sm font-medium">Niche: {stats.topNiche}</p></div>}
+                          {stats.topIntent && <div><p className="text-sm font-medium">Intent: {stats.topIntent}</p></div>}
+                          {stats.topAudience && <div><p className="text-sm font-medium">Audience: {stats.topAudience}</p></div>}
+                          {stats.avgRating > 0 && <div><p className="text-sm font-medium">Rating: {stats.avgRating.toFixed(1)}/1 avg</p></div>}
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="t-label mono">Interactions ({memory.length})</p>
+                {memory.map(item => (
+                  <div key={item.id} className="card p-4 space-y-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium mb-1">{item.prompt.split('\n')[0].slice(0, 80)}...</p>
+                        <p className="t-sm" style={{color:'var(--ink-3)'}}>
+                          {item.personalization?.niche && `${item.personalization.niche} • `}
+                          {item.personalization?.intent && `${item.personalization.intent} • `}
+                          {new Date(item.timestamp).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        {item.rating === 1 && <span title="Rated good">👍</span>}
+                        {item.rating === -1 && <span title="Rated needs work">👎</span>}
+                        <button
+                          onClick={() => deleteMemoryItem(item.id)}
+                          className="tap-link text-xs"
+                          title="Delete"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 mt-10 flex-wrap">
+                <button onClick={exportMemory} className="btn btn-ghost btn-sm">📥 Export Memory</button>
+                <label className="btn btn-ghost btn-sm cursor-pointer">
+                  📤 Import Memory
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => e.target.files?.[0] && importMemory(e.target.files[0])}
+                    style={{display:'none'}}
+                  />
+                </label>
+                <button onClick={clearMemory} className="btn btn-ghost btn-sm" style={{color:'var(--accent)'}}>🗑️ Clear All</button>
+              </div>
+            </>
           )}
         </div>
       )}
