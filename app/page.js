@@ -796,25 +796,25 @@ export default function Page() {
         <section className="pt-20 pb-16 md:pt-28">
           <p className="t-label mono mb-5">Hadigaun, Kathmandu</p>
           <h1 className="t-display mb-6">
-            Write it once.<br/>
-            Publish it in both<br/>
-            <span style={{color:'var(--accent)'}}>Nepali and English.</span>
+            Stop writing<br/>
+            for one language.<br/>
+            <span style={{color:'var(--accent)'}}>Reach both.</span>
           </h1>
           <h2 className="t-h2 mb-7" style={{color:'var(--ink-3)'}} lang="ne-Latn">
-            Ek choti likhe. Duwai bhashama publish garne.
+            Ek paragraph. Duwai post. Ek click.
           </h2>
 
           <p className="t-lead max-w-xl mb-9">
-            Describe your idea in one paragraph. Get back the Nepali post, the English
-            post, and a video script for each — written together, in one pass.
+            Your audience is split between Nepali and English readers. Stop writing twice.
+            One paragraph. Get Nepali + English posts and video scripts—all ready to go.
           </p>
 
           <button onClick={startBasic} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
-            Write my first post →
+            Create bilingual content →
           </button>
 
           <p className="t-sm mono mt-4">
-            No signup · Runs on your own Gemini key · Nothing posts without you
+            No signup · Use your own Gemini key · You control everything
           </p>
         </section>
 
@@ -912,17 +912,16 @@ export default function Page() {
 
         {/* Closing CTA — the second and last ask */}
         <section className="hairline py-16">
-          <h2 className="t-h1 mb-4">Your next post, in both languages.</h2>
+          <h2 className="t-h1 mb-4">Save 50% of your content workflow.</h2>
           <p className="t-body mb-8 max-w-lg">
-            Takes one paragraph and about thirty seconds. If what comes back isn't
-            usable, you've lost a minute.
+            Thirty seconds to describe your idea. Six pieces come back. Both languages,
+            ready to post. No rewrites, no translations, no double-work.
           </p>
           <button onClick={startBasic} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
-            Write my first post →
+            Build your first pack →
           </button>
           <p className="t-sm mt-6">
-            Pro — your recorded voice, gestures, and an avatar video —{' '}
-            <span className="mono" style={{color:'var(--ink-3)'}}>coming soon</span>.
+            <span style={{color:'var(--ink)'}}>Pro coming soon</span> — video with your voice and gestures.
           </p>
         </section>
 
