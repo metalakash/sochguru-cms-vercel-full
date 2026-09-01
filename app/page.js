@@ -565,6 +565,10 @@ export default function Page() {
     setVariantIdx(0)
   }
 
+  /** Functional update, because tapping two chips fast enough lands both handlers
+   *  in one batch — spreading the render's `personalization` there loses the first. */
+  const setAnswer = (key, value) => setPersonalization(p => ({ ...p, [key]: value }))
+
   /** Landing CTA. A finished pack means "write my first post" is asking for a
    *  new one — but a half-typed idea should survive the round trip. */
   const startBasic = () => {
@@ -1099,7 +1103,7 @@ export default function Page() {
                   <input
                     id="basic-niche"
                     value={personalization.niche}
-                    onChange={e=>setPersonalization({...personalization, niche:e.target.value})}
+                    onChange={e=>setAnswer('niche', e.target.value)}
                     placeholder="Agentic AI, career switch, Kathmandu tech…"
                     className="field mt-3"
                   />
@@ -1109,7 +1113,7 @@ export default function Page() {
                         key={s}
                         type="button"
                         aria-pressed={personalization.niche === s}
-                        onClick={()=>setPersonalization({...personalization, niche: personalization.niche === s ? '' : s})}
+                        onClick={()=>setAnswer('niche', personalization.niche === s ? '' : s)}
                         className="chip"
                       >{s}</button>
                     ))}
@@ -1121,7 +1125,7 @@ export default function Page() {
                   hint="pick the closest"
                   options={INTENT_OPTIONS}
                   value={personalization.intent}
-                  onChange={v=>setPersonalization({...personalization, intent:v})}
+                  onChange={v=>setAnswer('intent', v)}
                 />
 
                 <ChipGroup
@@ -1129,7 +1133,7 @@ export default function Page() {
                   hint="your main audience"
                   options={AUDIENCE_OPTIONS}
                   value={personalization.audience}
-                  onChange={v=>setPersonalization({...personalization, audience:v})}
+                  onChange={v=>setAnswer('audience', v)}
                 />
 
                 <div>
@@ -1139,7 +1143,7 @@ export default function Page() {
                   <input
                     id="basic-context"
                     value={personalization.contextStory}
-                    onChange={e=>setPersonalization({...personalization, contextStory:e.target.value})}
+                    onChange={e=>setAnswer('contextStory', e.target.value)}
                     placeholder="A number to include, a phrase to avoid, a launch date…"
                     className="field mt-3"
                   />
