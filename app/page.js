@@ -23,6 +23,26 @@ const VOICE_TAKES = [
 const AVATAR_POLL_MS = 5000
 const AVATAR_MAX_POLLS = 120
 
+/* Basic wizard ----------------------------------------------------- */
+
+const BASIC_STEPS = ['Your idea', 'Quick questions', 'Your drafts']
+
+// Below this the model has nothing specific to work from and every draft comes
+// back as the same generic founder post.
+const MIN_IDEA_WORDS = 15
+
+const EXAMPLE_IDEA =
+  'I left banking after ten years and now I build with AI agents from Kathmandu. ' +
+  'This week I automated my invoice follow-ups and it saved a whole afternoon. ' +
+  'My readers are split — dev friends here who read Nepali, and a tech audience ' +
+  'abroad reading English.'
+
+const NICHE_SUGGESTIONS = ['Agentic AI', 'Building in public', 'Career switch', 'Culture Nepal', 'Startups']
+const INTENT_OPTIONS = ['Share a learning', 'Ask for help', 'Announce something', 'Teach a thing', 'Inspire']
+const AUDIENCE_OPTIONS = ['Dev peers', 'Tech, broadly', 'Business owners', 'My niche community', 'A bit of everyone']
+
+const wordCount = s => s.trim().split(/\s+/).filter(Boolean).length
+
 /* ------------------------------------------------------------------ */
 /* Small presentational pieces                                         */
 /* ------------------------------------------------------------------ */
@@ -59,6 +79,29 @@ function Labeled({ id, label, hint, children }) {
 
 function Pending({ label }) {
   return (<><span className="spinner" aria-hidden="true" />{label}</>)
+}
+
+/** One question, answered by tapping. Buttons rather than radios — a radio dot
+ *  is a 16px target and these have to work with a thumb. */
+function ChipGroup({ legend, hint, options, value, onChange }) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-medium mb-1">
+        {legend} {hint && <span style={{color:'var(--ink-3)', fontWeight:400}}>— {hint}</span>}
+      </legend>
+      <div className="flex flex-wrap gap-2 mt-3">
+        {options.map(opt => (
+          <button
+            key={opt}
+            type="button"
+            aria-pressed={value === opt}
+            onClick={() => onChange(value === opt ? '' : opt)}
+            className="chip"
+          >{opt}</button>
+        ))}
+      </div>
+    </fieldset>
+  )
 }
 
 function ContentCard({ label, value, onCopy }) {
@@ -179,18 +222,20 @@ export default function Page() {
   const [activeGesture, setActiveGesture] = useState('Smile')
   const [camReady, setCamReady] = useState(false)
 
-  // Basic mode state
+  // Basic mode state — a three-step wizard: 1 idea, 2 quick questions, 3 result
+  const [basicStep, setBasicStep] = useState(1)
   const [basicPrompt, setBasicPrompt] = useState('')
   const [basicGenerating, setBasicGenerating] = useState(false)
   const [basicResult, setBasicResult] = useState(null)
   const [basicError, setBasicError] = useState('')
-  const [isPersonalizing, setIsPersonalizing] = useState(false)
+  const [variantIdx, setVariantIdx] = useState(0)
   const [personalization, setPersonalization] = useState({niche:'', intent:'', audience:'', contextStory:''})
 
   // Memory management
   const [memory, setMemory] = useState([])
   const [showMemory, setShowMemory] = useState(false)
   const [basicRating, setBasicRating] = useState(0)
+  const [basicMemoryId, setBasicMemoryId] = useState(null)
 
   // Optimistically open so the hero paints immediately — a "Loading…" flash in
   // front of the CTA costs more than it buys. The landing page carries nothing
@@ -315,9 +360,13 @@ export default function Page() {
         rating: 0,
         notes: ''
       }
-      const updated = [entry, ...memory.slice(0, 49)]
-      setMemory(updated)
-      localStorage.setItem('soch_memory', JSON.stringify(updated))
+      // Functional update — two generations in quick succession used to read the
+      // same stale `memory` and drop one of them.
+      setMemory(prev => {
+        const updated = [entry, ...prev.slice(0, 49)]
+        try { localStorage.setItem('soch_memory', JSON.stringify(updated)) } catch {}
+        return updated
+      })
       return entry
     } catch (err) {
       console.error('Memory save failed:', err)
@@ -505,6 +554,25 @@ export default function Page() {
     }
   }
 
+  const resetBasic = () => {
+    setBasicStep(1)
+    setBasicPrompt('')
+    setPersonalization({niche:'', intent:'', audience:'', contextStory:''})
+    setBasicResult(null)
+    setBasicError('')
+    setBasicRating(0)
+    setBasicMemoryId(null)
+    setVariantIdx(0)
+  }
+
+  /** Landing CTA. A finished pack means "write my first post" is asking for a
+   *  new one — but a half-typed idea should survive the round trip. */
+  const startBasic = () => {
+    if (basicStep === 3) resetBasic()
+    setShowMemory(false)
+    setMode('basic')
+  }
+
   const generateBasicPack = async () => {
     if (!basicPrompt.trim()) {
       setBasicError('Please enter a content idea or topic')
@@ -513,6 +581,7 @@ export default function Page() {
     setBasicGenerating(true)
     setBasicError('')
     setBasicResult(null)
+    setBasicStep(3)
     try {
       const payload = {
         prompt: basicPrompt,
@@ -531,8 +600,14 @@ export default function Page() {
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
       setBasicRating(0)
-      saveToMemory({ mode: 'basic', prompt: basicPrompt, personalization, result: data })
-      trackAnalytics('basic_pack_generated', { source: data.source, personalized: !!personalization.niche })
+      setVariantIdx(0)
+      const entry = saveToMemory({ mode: 'basic', prompt: basicPrompt, personalization, result: data })
+      setBasicMemoryId(entry?.id ?? null)
+      trackAnalytics('basic_pack_generated', {
+        source: data.source,
+        variations: data.variations?.length || 0,
+        personalized: !!(personalization.niche || personalization.intent || personalization.audience)
+      })
     } catch (err) {
       setBasicError(err.message)
       trackAnalytics('basic_pack_generated', { status: 'error', error: err.message })
@@ -675,6 +750,25 @@ export default function Page() {
     toast('Package downloaded.', 'ok')
   }
 
+  /* ---------------- derived: the variation currently on screen ----------------
+     Older packs in memory predate variations, so fall back to the flat fields. */
+
+  const variants = basicResult?.variations?.length
+    ? basicResult.variations
+    : basicResult
+      ? [{ label: '', englishStatus: basicResult.englishStatus, nepaliStatus: basicResult.nepaliStatus }]
+      : []
+  const activeVariant = variants[Math.min(variantIdx, variants.length - 1)] || {}
+
+  /** What the user is actually looking at — exports follow the visible version,
+   *  not whichever one the model happened to return first. */
+  const activePack = basicResult && {
+    ...basicResult,
+    englishStatus: activeVariant.englishStatus || basicResult.englishStatus,
+    nepaliStatus: activeVariant.nepaliStatus || basicResult.nepaliStatus,
+    selectedVersion: activeVariant.label || `Version ${variantIdx + 1}`
+  }
+
   /* ---------------- gate ---------------- */
 
   if (gate === 'locked') {
@@ -686,9 +780,11 @@ export default function Page() {
     )
   }
 
-  /* ---------------- landing ---------------- */
+  /* ---------------- landing ----------------
+     `showMemory` falls through to the shell below, which is where the dashboard
+     lives — otherwise the footer's Memory button set state nobody rendered. */
 
-  if (!mode) return (
+  if (!mode && !showMemory) return (
     <div className="min-h-screen">
       <div className="max-w-3xl mx-auto px-6">
 
@@ -709,7 +805,7 @@ export default function Page() {
             post, and a video script for each — written together, in one pass.
           </p>
 
-          <button onClick={()=>setMode('basic')} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
+          <button onClick={startBasic} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
             Write my first post →
           </button>
 
@@ -817,7 +913,7 @@ export default function Page() {
             Takes one paragraph and about thirty seconds. If what comes back isn't
             usable, you've lost a minute.
           </p>
-          <button onClick={()=>setMode('basic')} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
+          <button onClick={startBasic} className="btn btn-primary w-full sm:w-auto" style={{paddingInline:'2rem'}}>
             Write my first post →
           </button>
           <p className="t-sm mt-6">
@@ -845,10 +941,10 @@ export default function Page() {
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
       <header className="flex justify-between items-center gap-4 py-5 mb-8" style={{borderBottom:'1px solid var(--line)'}}>
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={()=>setMode(null)} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
+          <button onClick={()=>{setShowMemory(false); setMode(null)}} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
           <div className="min-w-0">
             <h1 className="text-base font-semibold truncate">
-              SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{mode==='basic' ? 'Basic' : 'Pro'}</span>
+              SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{showMemory ? 'Memory' : mode==='basic' ? 'Basic' : 'Pro'}</span>
             </h1>
           </div>
         </div>
@@ -899,128 +995,199 @@ export default function Page() {
 
       {/* ---------------- Basic ---------------- */}
 
-      {mode==='basic' && (
+      {mode==='basic' && !showMemory && (
         <div className="max-w-2xl mx-auto pb-16">
-          <div className="mb-10">
-            <h1 className="t-display mb-3">Your next idea</h1>
-            <p className="t-lead" style={{color:'var(--ink-3)'}}>
-              Write it honestly. The more authentic you sound, the better everything else becomes.
-            </p>
-          </div>
-
-          <div className="mb-8">
-            <label htmlFor="basic-prompt" className="t-label mono mb-3 block">Your story</label>
-            <textarea
-              id="basic-prompt"
-              value={basicPrompt}
-              onChange={e=>setBasicPrompt(e.target.value)}
-              placeholder="I left banking after ten years and now I build with AI agents from Kathmandu. This week I automated my invoice follow-ups and it saved a whole afternoon. My readers are split — dev friends here who read Nepali, and a tech audience abroad reading English."
-              className="field"
-              style={{
-                height: '14rem',
-                lineHeight: 1.7,
-                resize: 'vertical',
-                fontSize: '1.0625rem',
-                padding: '1.5rem',
-                border: '2px solid var(--line)',
-                background: 'var(--bg)',
-                borderRadius: '12px'
-              }}
-            />
-            <div className="flex justify-between items-center mt-3">
-              <p className="t-sm" style={{color:'var(--ink-3)'}}>
-                {basicPrompt.trim().split(/\s+/).filter(Boolean).length === 0
-                  ? 'Start typing your idea…'
-                  : basicPrompt.trim().split(/\s+/).filter(Boolean).length < 30
-                    ? `${basicPrompt.trim().split(/\s+/).filter(Boolean).length} words — keep going`
-                    : `${basicPrompt.trim().split(/\s+/).filter(Boolean).length} words — perfect`}
-              </p>
-              <span className="t-sm mono" style={{color:'var(--ink-3)'}}>
-                {Math.round((basicPrompt.trim().split(/\s+/).filter(Boolean).length / 100) * 100)}%
-              </span>
+          <div className="mb-9">
+            <div className="flex items-center justify-between mb-2">
+              <span className="t-sm mono">Step {basicStep} of 3</span>
+              <span className="t-sm mono" style={{color:'var(--accent)'}}>{BASIC_STEPS[basicStep-1]}</span>
+            </div>
+            <div
+              className="rail"
+              role="progressbar"
+              aria-valuenow={basicStep}
+              aria-valuemin={1}
+              aria-valuemax={3}
+              aria-label={`Step ${basicStep} of 3: ${BASIC_STEPS[basicStep-1]}`}
+            >
+              <i style={{width:`${(basicStep/3)*100}%`}} />
             </div>
           </div>
 
-          {basicPrompt.trim().length > 30 && (
-            <div className="mb-8 space-y-5 animate-in" style={{animationDuration:'300ms'}}>
-              <div className="border-t border-b border-line py-4">
-                <p className="t-label mono mb-4">Just a couple more things</p>
-                <p className="t-body mb-5" style={{color:'var(--ink-3)'}}>Based on what you shared:</p>
+          {/* ---- Step 1: the idea, in their own words ---- */}
+
+          {basicStep===1 && (
+            <div className="step-in">
+              <h1 className="t-display mb-3">What are you posting about?</h1>
+              <p className="t-lead mb-8">
+                One paragraph, the way you would tell a friend. Everything else is
+                built from this, so specific beats polished.
+              </p>
+
+              <label htmlFor="basic-prompt" className="t-label mono mb-3 block">Your idea</label>
+              <textarea
+                id="basic-prompt"
+                value={basicPrompt}
+                onChange={e=>setBasicPrompt(e.target.value)}
+                placeholder={`e.g. ${EXAMPLE_IDEA}`}
+                aria-describedby="basic-prompt-help"
+                className="field field-example"
+                style={{
+                  height: '13rem',
+                  lineHeight: 1.7,
+                  resize: 'vertical',
+                  fontSize: '1.0625rem',
+                  padding: '1.25rem',
+                  borderRadius: '12px'
+                }}
+              />
+
+              <div className="flex justify-between items-center gap-4 mt-3">
+                <p id="basic-prompt-help" className="t-sm" aria-live="polite">
+                  {wordCount(basicPrompt) === 0
+                    ? 'A few sentences is plenty.'
+                    : wordCount(basicPrompt) < MIN_IDEA_WORDS
+                      ? `${wordCount(basicPrompt)} words — ${MIN_IDEA_WORDS - wordCount(basicPrompt)} more to continue`
+                      : `${wordCount(basicPrompt)} words — good to go`}
+                </p>
+                <div className="rail shrink-0" style={{width:'88px'}} aria-hidden="true">
+                  <i style={{width:`${Math.min(100, (wordCount(basicPrompt) / 40) * 100)}%`}} />
+                </div>
               </div>
 
-              {!personalization.niche && (
-                <div className="space-y-2">
-                  <label htmlFor="basic-niche" className="text-sm font-medium block">What's your topic? <span style={{color:'var(--ink-3)'}}>— keep it specific</span></label>
+              <div className="flex flex-col-reverse sm:flex-row gap-3 mt-7">
+                <button
+                  onClick={()=>setBasicPrompt(EXAMPLE_IDEA)}
+                  className="btn btn-ghost sm:flex-1"
+                >Fill in an example</button>
+                <button
+                  onClick={()=>{ setBasicError(''); setBasicStep(2) }}
+                  disabled={wordCount(basicPrompt) < MIN_IDEA_WORDS}
+                  className="btn btn-primary sm:flex-1"
+                >Continue →</button>
+              </div>
+            </div>
+          )}
+
+          {/* ---- Step 2: the quick questions, all visible and editable ---- */}
+
+          {basicStep===2 && (
+            <div className="step-in">
+              <h1 className="t-h1 mb-2">A few quick things</h1>
+              <p className="t-body mb-8">
+                Half a minute here is the difference between drafts that sound like
+                you and drafts that sound like everyone. Skip anything that does not fit.
+              </p>
+
+              <div className="card p-4 mb-8">
+                <div className="flex items-start justify-between gap-3 mb-1.5">
+                  <p className="t-label mono">Your idea</p>
+                  <button onClick={()=>setBasicStep(1)} className="t-sm tap-link shrink-0" style={{color:'var(--accent)'}}>
+                    Edit
+                  </button>
+                </div>
+                <p className="t-body">
+                  {basicPrompt.length > 180 ? `${basicPrompt.slice(0, 180).trim()}…` : basicPrompt}
+                </p>
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <label htmlFor="basic-niche" className="text-sm font-medium block mb-1">
+                    What is this about? <span style={{color:'var(--ink-3)', fontWeight:400}}>— your topic, in a few words</span>
+                  </label>
                   <input
                     id="basic-niche"
                     value={personalization.niche}
                     onChange={e=>setPersonalization({...personalization, niche:e.target.value})}
-                    placeholder="AI & Automation, Banking, Creator economy…"
-                    className="field"
-                    style={{borderRadius:'8px'}}
+                    placeholder="Agentic AI, career switch, Kathmandu tech…"
+                    className="field mt-3"
+                  />
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {[...new Set([getMemoryStats()?.topNiche, ...NICHE_SUGGESTIONS].filter(Boolean))].slice(0, 5).map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        aria-pressed={personalization.niche === s}
+                        onClick={()=>setPersonalization({...personalization, niche: personalization.niche === s ? '' : s})}
+                        className="chip"
+                      >{s}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <ChipGroup
+                  legend="What should this post do?"
+                  hint="pick the closest"
+                  options={INTENT_OPTIONS}
+                  value={personalization.intent}
+                  onChange={v=>setPersonalization({...personalization, intent:v})}
+                />
+
+                <ChipGroup
+                  legend="Who is reading it?"
+                  hint="your main audience"
+                  options={AUDIENCE_OPTIONS}
+                  value={personalization.audience}
+                  onChange={v=>setPersonalization({...personalization, audience:v})}
+                />
+
+                <div>
+                  <label htmlFor="basic-context" className="text-sm font-medium block mb-1">
+                    Anything else? <span style={{color:'var(--ink-3)', fontWeight:400}}>— optional</span>
+                  </label>
+                  <input
+                    id="basic-context"
+                    value={personalization.contextStory}
+                    onChange={e=>setPersonalization({...personalization, contextStory:e.target.value})}
+                    placeholder="A number to include, a phrase to avoid, a launch date…"
+                    className="field mt-3"
                   />
                 </div>
-              )}
+              </div>
 
-              {!personalization.intent && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">What's your goal? <span style={{color:'var(--ink-3)'}}>— what do you want them to do</span></p>
-                  <div className="space-y-2">
-                    {['Share learning', 'Ask for help', 'Announce something', 'Educate', 'Inspire'].map((opt, idx) => (
-                      <label key={opt} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-900 cursor-pointer transition">
-                        <input
-                          type="radio"
-                          name="intent"
-                          value={opt}
-                          checked={personalization.intent===opt}
-                          onChange={e=>setPersonalization({...personalization, intent:e.target.value})}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">{opt}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {basicError && <div className="note note-err mt-6" role="alert">{basicError}</div>}
 
-              {!personalization.audience && (
-                <div className="space-y-3">
-                  <p className="text-sm font-medium">Who are you reaching? <span style={{color:'var(--ink-3)'}}>— who reads you most</span></p>
-                  <div className="space-y-2">
-                    {['Dev peers', 'Tech general', 'Business/Enterprise', 'Community/Niche', 'Mixed'].map(opt => (
-                      <label key={opt} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-slate-900 cursor-pointer transition">
-                        <input
-                          type="radio"
-                          name="audience"
-                          value={opt}
-                          checked={personalization.audience===opt}
-                          onChange={e=>setPersonalization({...personalization, audience:e.target.value})}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm">{opt}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-col-reverse sm:flex-row gap-3 mt-9">
+                <button onClick={()=>setBasicStep(1)} className="btn btn-ghost sm:flex-1">← Back</button>
+                <button
+                  onClick={generateBasicPack}
+                  disabled={basicGenerating}
+                  className="btn btn-primary sm:flex-[2]"
+                >
+                  {basicGenerating ? <Pending label="Writing…" /> : 'Generate 3 versions →'}
+                </button>
+              </div>
+              <p className="t-sm text-center mt-3">
+                {[personalization.niche, personalization.intent, personalization.audience].filter(Boolean).length} of 3
+                answered · all optional
+              </p>
             </div>
           )}
 
-          <button
-            onClick={generateBasicPack}
-            disabled={basicGenerating || !basicPrompt.trim()}
-            className="btn btn-primary w-full"
-            style={{height:'3rem', fontSize:'1rem', fontWeight:'600'}}
-          >
-            {basicGenerating ? <Pending label="Writing your six pieces…" /> : '✨ Generate'}
-          </button>
+          {/* ---- Step 3: the drafts ---- */}
 
-          {basicError && <div className="note note-err mt-4" role="alert">{basicError}</div>}
+          {basicStep===3 && basicGenerating && (
+            <div className="step-in">
+              <h1 className="t-h1 mb-2">Writing three versions…</h1>
+              <p className="t-body">Same idea, three different openings. About twenty seconds.</p>
+              <GeneratingSkeleton />
+            </div>
+          )}
 
-          {basicGenerating && <GeneratingSkeleton />}
+          {basicStep===3 && !basicGenerating && basicError && (
+            <div className="step-in">
+              <h1 className="t-h1 mb-4">That did not go through</h1>
+              <div className="note note-err mb-6" role="alert">{basicError}</div>
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
+                <button onClick={()=>setBasicStep(2)} className="btn btn-ghost sm:flex-1">← Back to questions</button>
+                <button onClick={generateBasicPack} className="btn btn-primary sm:flex-1">Try again</button>
+              </div>
+            </div>
+          )}
 
-          {basicResult && !basicGenerating && (
-            <div className="mt-10 space-y-4">
+          {basicStep===3 && basicResult && !basicGenerating && (
+            <div className="step-in space-y-4">
               <div className="flex items-center justify-between">
                 <p className="t-label mono">Draft — review before posting</p>
                 {basicResult.source==='gemini' && <span className="pill pill-accent mono">GEMINI</span>}
@@ -1037,9 +1204,34 @@ export default function Page() {
                 </div>
               )}
 
+              {variants.length > 1 && (
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                      <p className="t-label mono mb-1">Three takes on it</p>
+                      <p className="t-sm">{activeVariant.label || `Version ${variantIdx + 1}`}</p>
+                    </div>
+                    <div className="seg shrink-0" role="group" aria-label="Choose a version">
+                      {variants.map((v, i) => (
+                        <button
+                          key={i}
+                          className="seg-btn"
+                          aria-pressed={variantIdx === i}
+                          onClick={()=>{ setVariantIdx(i); trackAnalytics('variation_switched', { index: i, angle: v.angle }) }}
+                        >{String.fromCharCode(65 + i)}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="t-sm">
+                    Switching versions changes both status posts below. The scripts and
+                    prompts stay the same.
+                  </p>
+                </div>
+              )}
+
               {[
-                ['Nepali status', basicResult.nepaliStatus],
-                ['English status', basicResult.englishStatus],
+                ['Nepali status', activeVariant.nepaliStatus || basicResult.nepaliStatus],
+                ['English status', activeVariant.englishStatus || basicResult.englishStatus],
                 ['Nepali video script', basicResult.nepaliVideo],
                 ['English video script', basicResult.englishVideo],
                 ['Image prompt', basicResult.imagePrompt],
@@ -1048,35 +1240,56 @@ export default function Page() {
                 <ContentCard key={label} label={label} value={value} onCopy={()=>copy(value)} />
               ))}
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="t-label mono">How was this?</p>
-                  <div className="flex gap-2">
+              {basicResult.hashtags?.length > 0 && (
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <p className="t-label mono">Hashtags</p>
                     <button
-                      onClick={() => {
-                        const entry = memory.find(m => m.result === basicResult)
-                        if (entry) rateInteraction(entry.id, 1)
-                        setBasicRating(1)
-                        toast('Saved — helps us learn', 'ok')
-                      }}
-                      className={`text-xl p-2 hover:scale-110 transition ${basicRating === 1 ? 'opacity-100' : 'opacity-50'}`}
-                      title="Good result"
-                    >
-                      👍
-                    </button>
-                    <button
-                      onClick={() => {
-                        const entry = memory.find(m => m.result === basicResult)
-                        if (entry) rateInteraction(entry.id, -1)
-                        setBasicRating(-1)
-                        toast('Noted — we\'ll improve', 'ok')
-                      }}
-                      className={`text-xl p-2 hover:scale-110 transition ${basicRating === -1 ? 'opacity-100' : 'opacity-50'}`}
-                      title="Needs work"
-                    >
-                      👎
-                    </button>
+                      onClick={()=>copy(basicResult.hashtags.map(h=>`#${h}`).join(' '))}
+                      className="t-sm tap-link hover:opacity-70 transition shrink-0"
+                      style={{color:'var(--ink-3)'}}
+                    >Copy</button>
                   </div>
+                  <p className="t-body mono">{basicResult.hashtags.map(h=>`#${h}`).join('  ')}</p>
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+                <button onClick={resetBasic} className="btn btn-ghost sm:flex-1">Write another</button>
+                <button
+                  onClick={generateBasicPack}
+                  disabled={basicGenerating}
+                  className="btn btn-ghost sm:flex-1"
+                >Regenerate these three</button>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="t-label mono">How was this?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (basicMemoryId) rateInteraction(basicMemoryId, 1)
+                      setBasicRating(1)
+                      toast('Saved — helps us learn', 'ok')
+                    }}
+                    aria-pressed={basicRating === 1}
+                    className={`text-xl p-2 hover:scale-110 transition ${basicRating === 1 ? 'opacity-100' : 'opacity-50'}`}
+                    title="Good result"
+                  >
+                    👍
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (basicMemoryId) rateInteraction(basicMemoryId, -1)
+                      setBasicRating(-1)
+                      toast('Noted — we\'ll improve', 'ok')
+                    }}
+                    aria-pressed={basicRating === -1}
+                    className={`text-xl p-2 hover:scale-110 transition ${basicRating === -1 ? 'opacity-100' : 'opacity-50'}`}
+                    title="Needs work"
+                  >
+                    👎
+                  </button>
                 </div>
               </div>
 
@@ -1084,14 +1297,14 @@ export default function Page() {
                 <p className="t-label mono">Export as</p>
                 <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => { download(basicResult, 'sochguru-content.json'); trackAnalytics('basic_pack_exported', {format:'json'}) }}
+                    onClick={() => { download(activePack, 'sochguru-content.json'); trackAnalytics('basic_pack_exported', {format:'json'}) }}
                     className="btn btn-ghost btn-sm w-full"
                   >
                     JSON
                   </button>
                   <button
                     onClick={() => {
-                      const csv = [['Field','Content'],...Object.entries(basicResult).map(([k,v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+                      const csv = [['Field','Content'],...Object.entries(activePack).map(([k,v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
                       const blob = new Blob([csv], {type:'text/csv'})
                       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sochguru-content.csv'; a.click(); URL.revokeObjectURL(a.href)
                       trackAnalytics('basic_pack_exported', {format:'csv'})
@@ -1102,7 +1315,8 @@ export default function Page() {
                   </button>
                   <button
                     onClick={() => {
-                      const md = `# ${basicResult.persona?.name || 'Content Pack'}\n\n**Niche:** ${basicResult.persona?.niche}\n**Audience:** ${basicResult.persona?.audience}\n\n## Story\n${basicResult.persona?.story}\n\n## Nepali Status\n${basicResult.nepaliStatus}\n\n## English Status\n${basicResult.englishStatus}\n\n## Nepali Video Script\n${basicResult.nepaliVideo}\n\n## English Video Script\n${basicResult.englishVideo}\n\n## Image Prompt\n${basicResult.imagePrompt}\n\n## Video Prompt\n${basicResult.veoPrompt}`
+                      const tags = activePack.hashtags?.length ? `\n\n## Hashtags\n${activePack.hashtags.map(h=>`#${h}`).join(' ')}` : ''
+                      const md = `# ${activePack.persona?.name || 'Content Pack'}\n\n**Niche:** ${activePack.persona?.niche}\n**Audience:** ${activePack.persona?.audience}\n**Version:** ${activePack.selectedVersion}\n\n## Story\n${activePack.persona?.story}\n\n## Nepali Status\n${activePack.nepaliStatus}\n\n## English Status\n${activePack.englishStatus}\n\n## Nepali Video Script\n${activePack.nepaliVideo}\n\n## English Video Script\n${activePack.englishVideo}\n\n## Image Prompt\n${activePack.imagePrompt}\n\n## Video Prompt\n${activePack.veoPrompt}${tags}`
                       const blob = new Blob([md], {type:'text/markdown'})
                       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sochguru-content.md'; a.click(); URL.revokeObjectURL(a.href)
                       trackAnalytics('basic_pack_exported', {format:'markdown'})
@@ -1140,14 +1354,23 @@ export default function Page() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     {(() => {
                       const stats = getMemoryStats()
-                      return (
-                        <>
-                          {stats.topNiche && <div><p className="text-sm font-medium">Niche: {stats.topNiche}</p></div>}
-                          {stats.topIntent && <div><p className="text-sm font-medium">Intent: {stats.topIntent}</p></div>}
-                          {stats.topAudience && <div><p className="text-sm font-medium">Audience: {stats.topAudience}</p></div>}
-                          {stats.avgRating > 0 && <div><p className="text-sm font-medium">Rating: {stats.avgRating.toFixed(1)}/1 avg</p></div>}
-                        </>
+                      const rows = [
+                        stats.topNiche && ['Niche', stats.topNiche],
+                        stats.topIntent && ['Intent', stats.topIntent],
+                        stats.topAudience && ['Audience', stats.topAudience],
+                        stats.avgRating > 0 && ['Rating', `${stats.avgRating.toFixed(1)}/1 avg`]
+                      ].filter(Boolean)
+
+                      // An empty card reads as broken. Say why it is empty instead.
+                      if (rows.length === 0) return (
+                        <p className="t-body sm:col-span-2">
+                          Nothing yet. Answer the quick questions when you generate and
+                          your usual topic, goal and audience show up here.
+                        </p>
                       )
+                      return rows.map(([label, value]) => (
+                        <div key={label}><p className="text-sm font-medium">{label}: {value}</p></div>
+                      ))
                     })()}
                   </div>
                 </div>

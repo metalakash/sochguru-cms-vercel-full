@@ -1,0 +1,3 @@
+# Private creator tool — not intended for search indexing.
+User-agent: *
+Disallow: /

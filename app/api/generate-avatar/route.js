@@ -1,6 +1,9 @@
+import { guard, safeUpstreamError } from '../../../lib/security'
+
 const HEYGEN_API_KEY = process.env.HEYGEN_API_KEY
 const HEYGEN_BASE = 'https://api.heygen.com/v3'
-const DEFAULT_AVATAR_ID = 'Wayne_20240711'
+const DEFAULT_AVATAR_ID = process.env.HEYGEN_AVATAR_ID || 'Wayne_20240711'
+const MAX_SCRIPT_CHARS = 3000
 
 async function createHeyGenVideo(script, voiceId) {
   if (!HEYGEN_API_KEY) throw new Error('HEYGEN_API_KEY not configured')
@@ -40,7 +43,7 @@ async function createHeyGenVideo(script, voiceId) {
 async function checkHeyGenStatus(jobId) {
   if (!HEYGEN_API_KEY) throw new Error('HEYGEN_API_KEY not configured')
 
-  const res = await fetch(`${HEYGEN_BASE}/videos/${jobId}`, {
+  const res = await fetch(`${HEYGEN_BASE}/videos/${encodeURIComponent(jobId)}`, {
     headers: { 'X-Api-Key': HEYGEN_API_KEY }
   })
 
@@ -60,12 +63,24 @@ async function checkHeyGenStatus(jobId) {
 }
 
 export async function POST(request) {
-  const body = await request.json().catch(() => null)
-  const { action, script, voiceId, jobId } = body || {}
+  const { body, response } = await guard(request, {
+    name: 'generate-avatar',
+    // Status polling runs every 5s, so the window has to accommodate a full job.
+    limit: 60,
+    windowMs: 5 * 60 * 1000,
+    maxBytes: 32 * 1024
+  })
+  if (response) return response
+
+  const { action } = body
 
   if (action === 'generate') {
+    const script = typeof body.script === 'string' ? body.script.trim() : ''
     if (!script) {
       return Response.json({ error: 'script is required' }, { status: 400 })
+    }
+    if (script.length > MAX_SCRIPT_CHARS) {
+      return Response.json({ error: `Script is too long (max ${MAX_SCRIPT_CHARS} characters)` }, { status: 400 })
     }
 
     if (!HEYGEN_API_KEY) {
@@ -75,6 +90,8 @@ export async function POST(request) {
       )
     }
 
+    const voiceId = typeof body.voiceId === 'string' ? body.voiceId.trim() : ''
+
     try {
       const result = await createHeyGenVideo(script, voiceId)
       return Response.json({
@@ -82,20 +99,22 @@ export async function POST(request) {
         message: 'Video generation started. Check status with jobId.'
       })
     } catch (err) {
-      return Response.json({ error: err.message }, { status: 502 })
+      // The voice_id hint is our own guidance, worth surfacing verbatim.
+      const message = /voice_id is required/.test(err.message) ? err.message : safeUpstreamError(err, 'HeyGen')
+      return Response.json({ error: message }, { status: 502 })
     }
   }
 
   if (action === 'status') {
-    if (!jobId) {
-      return Response.json({ error: 'jobId is required' }, { status: 400 })
+    const jobId = typeof body.jobId === 'string' ? body.jobId.trim() : ''
+    if (!/^[A-Za-z0-9_-]{6,80}$/.test(jobId)) {
+      return Response.json({ error: 'A valid jobId is required' }, { status: 400 })
     }
 
     try {
-      const result = await checkHeyGenStatus(jobId)
-      return Response.json(result)
+      return Response.json(await checkHeyGenStatus(jobId))
     } catch (err) {
-      return Response.json({ error: err.message }, { status: 502 })
+      return Response.json({ error: safeUpstreamError(err, 'HeyGen') }, { status: 502 })
     }
   }
 
