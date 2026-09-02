@@ -1,5 +1,5 @@
 import { templateContent } from '../../../lib/content-template'
-import { guard, safeUpstreamError } from '../../../lib/security'
+import { guard, safeUpstreamError, userApiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 const MAX_FIELD_CHARS = 2000
@@ -53,10 +53,7 @@ Generate one day's bilingual content pack as JSON with exactly these fields:
 Return only the JSON object.`
 }
 
-async function callGemini(persona) {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_CMS
-  if (!apiKey) return null
-
+async function callGemini(apiKey, persona) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
     {
@@ -102,12 +99,32 @@ export async function POST(request) {
 
   const persona = sanitizePersona(body.persona)
 
+  // Caller's own key only — no process.env fallback, or an anonymous request
+  // would spend whatever key Pro adds later. No key still yields the template,
+  // which keeps the step usable without billing anyone.
+  const apiKey = userApiKey(request)
+  if (apiKey && !keyLooksValid(apiKey)) {
+    return Response.json({
+      error: 'That does not look like a Gemini API key. Copy the whole value from Google AI Studio.',
+      code: 'bad_key'
+    }, { status: 400 })
+  }
+  if (!apiKey) {
+    return Response.json({ ...templateContent(persona), source: 'template' })
+  }
+
   try {
-    const generated = await callGemini(persona)
+    const generated = await callGemini(apiKey, persona)
     if (generated) {
       return Response.json({ ...generated, source: 'gemini' })
     }
   } catch (err) {
+    if (isKeyRejection(err)) {
+      return Response.json({
+        error: 'Gemini rejected that key. Check it was copied in full and has the Generative Language API enabled.',
+        code: 'bad_key'
+      }, { status: 400 })
+    }
     // The template keeps the step usable when Gemini is down or unconfigured.
     return Response.json({
       ...templateContent(persona),

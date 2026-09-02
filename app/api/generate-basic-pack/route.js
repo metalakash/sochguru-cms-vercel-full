@@ -1,4 +1,4 @@
-import { guard, safeUpstreamError } from '../../../lib/security'
+import { guard, safeUpstreamError, userApiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 const MAX_PROMPT_CHARS = 4000
@@ -105,9 +105,6 @@ status posts.
 Return only the JSON object.`
 }
 
-function getApiKey() {
-  return process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_CMS
-}
 
 async function requestGemini(apiKey, userPrompt, personalization) {
   return fetch(
@@ -157,10 +154,7 @@ function normalize(raw) {
   }
 }
 
-async function callGemini(userPrompt, personalization = {}) {
-  const apiKey = getApiKey()
-  if (!apiKey) return null
-
+async function callGemini(apiKey, userPrompt, personalization = {}) {
   let res = await requestGemini(apiKey, userPrompt, personalization)
   if (res.status === 503) {
     await new Promise(r => setTimeout(r, 1200))
@@ -199,10 +193,18 @@ export async function POST(request) {
     return Response.json({ error: `Prompt is too long (max ${MAX_PROMPT_CHARS} characters)` }, { status: 400 })
   }
 
-  if (!getApiKey()) {
+  const apiKey = userApiKey(request)
+  if (!apiKey) {
     return Response.json({
-      error: 'No Gemini API key on the server. Add GEMINI_API_KEY in Vercel → Settings → Environment Variables, then redeploy.'
-    }, { status: 503 })
+      error: 'Add your Gemini API key to generate. It is kept in this browser and sent only with your own requests.',
+      code: 'no_key'
+    }, { status: 400 })
+  }
+  if (!keyLooksValid(apiKey)) {
+    return Response.json({
+      error: 'That does not look like a Gemini API key. Copy the whole value from Google AI Studio.',
+      code: 'bad_key'
+    }, { status: 400 })
   }
 
   const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
@@ -214,9 +216,17 @@ export async function POST(request) {
   }
 
   try {
-    const generated = await callGemini(prompt, personalization)
+    const generated = await callGemini(apiKey, prompt, personalization)
     return Response.json({ ...generated, source: 'gemini' })
   } catch (err) {
+    // A rejected key is the caller's problem to fix, not an upstream outage —
+    // it needs its own code so the UI can reopen the key form.
+    if (isKeyRejection(err)) {
+      return Response.json({
+        error: 'Gemini rejected that key. Check it was copied in full and has the Generative Language API enabled.',
+        code: 'bad_key'
+      }, { status: 400 })
+    }
     return Response.json({ error: safeUpstreamError(err, 'Gemini') }, { status: 502 })
   }
 }

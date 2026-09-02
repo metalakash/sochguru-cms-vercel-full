@@ -104,6 +104,81 @@ function ChipGroup({ legend, hint, options, value, onChange }) {
   )
 }
 
+/** Key entry for Basic. The key is held in this browser and travels only with
+ *  the user's own generate requests — the server keeps none and has no fallback
+ *  of its own, so nobody can spend anyone else's quota. */
+function KeyForm({ saved, onSave, onCancel }) {
+  const [draft, setDraft] = useState('')
+  const [reveal, setReveal] = useState(false)
+
+  const submit = e => {
+    e.preventDefault()
+    if (draft.trim()) onSave(draft)
+  }
+
+  return (
+    <form onSubmit={submit} className="card p-5 mt-6">
+      <p className="t-label mono mb-2">{saved ? 'Replace your Gemini key' : 'Your Gemini API key'}</p>
+      <p className="t-sm mb-4">
+        Basic runs on your own key, so your generations are billed to you and nobody
+        else. Get one free at{' '}
+        <a
+          href="https://aistudio.google.com/apikey"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--accent)' }}
+        >aistudio.google.com/apikey</a>.
+      </p>
+      <div className="flex gap-2">
+        <input
+          type={reveal ? 'text' : 'password'}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder="Paste your key"
+          autoComplete="off"
+          spellCheck="false"
+          className="field flex-1"
+          aria-label="Gemini API key"
+        />
+        <button
+          type="button"
+          onClick={() => setReveal(r => !r)}
+          className="btn btn-ghost btn-sm shrink-0"
+        >{reveal ? 'Hide' : 'Show'}</button>
+      </div>
+      <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+        {saved && (
+          <button type="button" onClick={onCancel} className="btn btn-ghost sm:flex-1">Cancel</button>
+        )}
+        <button type="submit" disabled={!draft.trim()} className="btn btn-primary sm:flex-[2]">
+          Save key
+        </button>
+      </div>
+      <p className="t-sm mt-4">
+        Stored in this browser only. It is sent with your own requests so they can reach
+        Gemini, and is never written to the server or shared with anyone.
+      </p>
+    </form>
+  )
+}
+
+/** One-line key status, so the cost model is visible before you press generate. */
+function KeyStatus({ value, onChange, onRemove }) {
+  const masked = value.length > 12
+    ? `${value.slice(0, 6)}…${value.slice(-4)}`
+    : '••••••'
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-6">
+      <p className="t-sm">
+        <span style={{ color: 'var(--ink)' }}>Your key</span>{' '}
+        <span className="mono" style={{ color: 'var(--ink-3)' }}>{masked}</span>
+      </p>
+      <button onClick={onChange} className="t-sm tap-link" style={{ color: 'var(--accent)' }}>Change</button>
+      <button onClick={onRemove} className="t-sm tap-link" style={{ color: 'var(--ink-3)' }}>Remove</button>
+    </div>
+  )
+}
+
 function ContentCard({ label, value, onCopy }) {
   return (
     <div className="card p-5">
@@ -231,6 +306,12 @@ export default function Page() {
   const [variantIdx, setVariantIdx] = useState(0)
   const [personalization, setPersonalization] = useState({niche:'', intent:'', audience:'', contextStory:''})
 
+  // The visitor's own Gemini key. Browser-only: read from localStorage and sent
+  // as a header with each generate request. The server never stores it, and
+  // never falls back to a key of its own, so nobody spends anyone else's quota.
+  const [geminiKey, setGeminiKey] = useState('')
+  const [showKeyForm, setShowKeyForm] = useState(false)
+
   // Memory management
   const [memory, setMemory] = useState([])
   const [showMemory, setShowMemory] = useState(false)
@@ -272,9 +353,23 @@ export default function Page() {
     } catch {
       localStorage.removeItem('soch_cms_persona')
     }
+    try {
+      const savedKey = localStorage.getItem('soch_gemini_key')
+      if (savedKey) setGeminiKey(savedKey)
+    } catch {}
     // Load memory on mount
     loadMemory()
   }, [])
+
+  /** Persist the key to this browser only. Empty clears it. */
+  const saveGeminiKey = key => {
+    const trimmed = key.trim()
+    setGeminiKey(trimmed)
+    try {
+      if (trimmed) localStorage.setItem('soch_gemini_key', trimmed)
+      else localStorage.removeItem('soch_gemini_key')
+    } catch {}
+  }
 
   /* ---------------- camera lifecycle ---------------- */
   const stopCamera = useCallback(() => {
@@ -582,6 +677,12 @@ export default function Page() {
       setBasicError('Please enter a content idea or topic')
       return
     }
+    // Ask here rather than round-tripping to a 400 — it keeps the answers on
+    // screen instead of bouncing the user to the error step.
+    if (!geminiKey) {
+      setShowKeyForm(true)
+      return
+    }
     setBasicGenerating(true)
     setBasicError('')
     setBasicResult(null)
@@ -596,11 +697,23 @@ export default function Page() {
       }
       const res = await fetch('/api/generate-basic-pack', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Header, not body: keeps the key out of request logs and analytics.
+          'x-gemini-key': geminiKey
+        },
         body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (res.status === 401) { setGate('locked'); return }
+      // A rejected or missing key is fixable in place — reopen the form rather
+      // than stranding the user on the generic error step.
+      if (data.code === 'no_key' || data.code === 'bad_key') {
+        setBasicStep(2)
+        setShowKeyForm(true)
+        setBasicError(data.error)
+        return
+      }
       if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`)
       setBasicResult(data)
       setBasicRating(0)
@@ -894,9 +1007,11 @@ export default function Page() {
           <p className="t-label mono mb-6">Worth knowing before you start</p>
           <div className="space-y-4 t-body">
             <p>
-              <span style={{color:'var(--ink)'}}>Your API keys stay on the server.</span>{' '}
-              They're read from environment variables and never sent to the browser.
-              Every call is billed to your own account at their rates.
+              <span style={{color:'var(--ink)'}}>Basic runs on your own Gemini key.</span>{' '}
+              It is saved to this browser, and sent with your own requests so they can
+              reach Gemini — it is never written to the server and never shared. Every
+              call is billed to your Google account at their rates, so what you generate
+              is yours and costs nobody else anything.
             </p>
             <p>
               <span style={{color:'var(--ink)'}}>The Nepali is Romanized, not Devanagari.</span>{' '}
@@ -921,7 +1036,8 @@ export default function Page() {
             Build your first pack →
           </button>
           <p className="t-sm mt-6">
-            <span style={{color:'var(--ink)'}}>Pro coming soon</span> — video with your voice and gestures.
+            <span style={{color:'var(--ink)'}}>Pro coming soon</span> — your recorded voice,
+            gestures and avatar video, with the AI included so you bring no key of your own.
           </p>
         </section>
 
@@ -1150,6 +1266,20 @@ export default function Page() {
               </div>
 
               {basicError && <div className="note note-err mt-6" role="alert">{basicError}</div>}
+
+              {(showKeyForm || !geminiKey) ? (
+                <KeyForm
+                  saved={!!geminiKey}
+                  onSave={k => { saveGeminiKey(k); setShowKeyForm(false); setBasicError('') }}
+                  onCancel={() => setShowKeyForm(false)}
+                />
+              ) : (
+                <KeyStatus
+                  value={geminiKey}
+                  onChange={() => setShowKeyForm(true)}
+                  onRemove={() => { saveGeminiKey(''); setShowKeyForm(true) }}
+                />
+              )}
 
               <div className="flex flex-col-reverse sm:flex-row gap-3 mt-9">
                 <button onClick={()=>setBasicStep(1)} className="btn btn-ghost sm:flex-1">← Back</button>
@@ -1772,7 +1902,7 @@ export default function Page() {
 
               {content.source!=='gemini' && (
                 <div className="note note-warn" role="status">
-                  Using the built-in template. Set GEMINI_API_KEY on the server for generated content.
+                  Using the built-in template. Add your Gemini key in Basic to get generated content.
                 </div>
               )}
 
