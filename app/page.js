@@ -156,7 +156,8 @@ function KeyForm({ saved, onSave, onCancel, canCancel }) {
       </div>
       <p className="t-sm mt-4">
         Stored in this browser only. It is sent with your own requests so they can reach
-        Gemini, and is never written to the server or shared with anyone.
+        Gemini, and is never written to the server or shared with anyone. What you write
+        in the box above <em>is</em> saved — the key is not.
       </p>
     </form>
   )
@@ -946,7 +947,7 @@ export default function Page() {
           </button>
 
           <p className="t-sm mono mt-4">
-            No signup · Use your own Gemini key · You control everything
+            No signup · Your own Gemini key · Your prompts are saved
           </p>
         </section>
 
@@ -1031,6 +1032,14 @@ export default function Page() {
               reach Gemini — it is never written to the server and never shared. Every
               call is billed to your Google account at their rates, so what you generate
               is yours and costs nobody else anything.
+            </p>
+            <p>
+              <span style={{color:'var(--ink)'}}>What you write here is saved.</span>{' '}
+              Your idea, the answers you tap, and the drafts that come back are stored so
+              I can see what people are actually using this for and make it better. Your
+              API key is the one thing that is not — it is used for your request and
+              thrown away. If that trade is not for you, this is the moment to close the
+              tab rather than the moment to find out later.
             </p>
             <p>
               <span style={{color:'var(--ink)'}}>The Nepali is Romanized, not Devanagari.</span>{' '}

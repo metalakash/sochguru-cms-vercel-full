@@ -1,4 +1,5 @@
 import { guard, safeUpstreamError, resolveGeminiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
+import { recordGeneration } from '../../../lib/db'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 const MAX_PROMPT_CHARS = 4000
@@ -172,7 +173,9 @@ async function callGemini(apiKey, userPrompt, personalization = {}) {
 
   const parsed = normalize(JSON.parse(text))
   if (parsed.variations.length === 0) throw new Error('Gemini returned no usable variations')
-  return parsed
+  // usageMetadata is what a future per-user bill would be computed from, so it
+  // is worth keeping even while nobody is being billed.
+  return { pack: parsed, usage: data?.usageMetadata || {} }
 }
 
 export async function POST(request) {
@@ -218,9 +221,25 @@ export async function POST(request) {
     context: str(body.context, 300)
   }
 
+  const startedAt = Date.now()
+  // Shared by every exit below. Note there is no apiKey field: the key is held
+  // for the call above and discarded, never written.
+  const record = extra => recordGeneration({
+    mode: 'basic',
+    prompt,
+    personalization,
+    keySource,
+    model: GEMINI_MODEL,
+    durationMs: Date.now() - startedAt,
+    ...extra
+  })
+
   try {
-    const generated = await callGemini(apiKey, prompt, personalization)
-    return Response.json({ ...generated, source: 'gemini' })
+    const { pack, usage } = await callGemini(apiKey, prompt, personalization)
+    // Fire and forget: a database outage must not cost the caller the content
+    // they just paid Gemini for.
+    record({ ok: true, usage, variations: pack.variations.length, response: pack })
+    return Response.json({ ...pack, source: 'gemini' })
   } catch (err) {
     // A rejected key is the caller's problem to fix, not an upstream outage —
     // it needs its own code so the UI can reopen the key form.
@@ -228,16 +247,19 @@ export async function POST(request) {
       // A broken shared key is the operator's to fix — do not send a gate
       // member off to check a key they never entered.
       if (keySource === 'server') {
+        record({ ok: false, errorCode: 'server_key_bad' })
         return Response.json({
           error: 'The shared SochGuru key is not working right now. Add your own Gemini key to keep going.',
           code: 'server_key_bad'
         }, { status: 502 })
       }
+      record({ ok: false, errorCode: 'bad_key' })
       return Response.json({
         error: 'Gemini rejected that key. Check it was copied in full and has the Generative Language API enabled.',
         code: 'bad_key'
       }, { status: 400 })
     }
+    record({ ok: false, errorCode: 'upstream' })
     return Response.json({ error: safeUpstreamError(err, 'Gemini') }, { status: 502 })
   }
 }
