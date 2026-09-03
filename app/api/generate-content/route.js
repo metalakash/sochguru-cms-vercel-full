@@ -1,5 +1,5 @@
 import { templateContent } from '../../../lib/content-template'
-import { guard, safeUpstreamError, userApiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
+import { guard, safeUpstreamError, resolveGeminiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 const MAX_FIELD_CHARS = 2000
@@ -99,11 +99,11 @@ export async function POST(request) {
 
   const persona = sanitizePersona(body.persona)
 
-  // Caller's own key only — no process.env fallback, or an anonymous request
-  // would spend whatever key Pro adds later. No key still yields the template,
-  // which keeps the step usable without billing anyone.
-  const apiKey = userApiKey(request)
-  if (apiKey && !keyLooksValid(apiKey)) {
+  // Own key first, the operator's only from behind the gate. Anonymous callers
+  // resolve to nothing and get the template, which keeps the step usable
+  // without billing anyone.
+  const { key: apiKey, source: keySource } = resolveGeminiKey(request)
+  if (keySource === 'user' && !keyLooksValid(apiKey)) {
     return Response.json({
       error: 'That does not look like a Gemini API key. Copy the whole value from Google AI Studio.',
       code: 'bad_key'
@@ -119,7 +119,7 @@ export async function POST(request) {
       return Response.json({ ...generated, source: 'gemini' })
     }
   } catch (err) {
-    if (isKeyRejection(err)) {
+    if (isKeyRejection(err) && keySource === 'user') {
       return Response.json({
         error: 'Gemini rejected that key. Check it was copied in full and has the Generative Language API enabled.',
         code: 'bad_key'

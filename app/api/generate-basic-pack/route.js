@@ -1,4 +1,4 @@
-import { guard, safeUpstreamError, userApiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
+import { guard, safeUpstreamError, resolveGeminiKey, keyLooksValid, isKeyRejection } from '../../../lib/security'
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-lite-latest'
 const MAX_PROMPT_CHARS = 4000
@@ -193,14 +193,17 @@ export async function POST(request) {
     return Response.json({ error: `Prompt is too long (max ${MAX_PROMPT_CHARS} characters)` }, { status: 400 })
   }
 
-  const apiKey = userApiKey(request)
+  // Own key first, the operator's only from behind the gate. Routes never read
+  // process.env for a key themselves — see resolveGeminiKey.
+  const { key: apiKey, source: keySource } = resolveGeminiKey(request)
   if (!apiKey) {
     return Response.json({
       error: 'Add your Gemini API key to generate. It is kept in this browser and sent only with your own requests.',
       code: 'no_key'
     }, { status: 400 })
   }
-  if (!keyLooksValid(apiKey)) {
+  // Shape-check only what the caller typed. The operator's key is not theirs to fix.
+  if (keySource === 'user' && !keyLooksValid(apiKey)) {
     return Response.json({
       error: 'That does not look like a Gemini API key. Copy the whole value from Google AI Studio.',
       code: 'bad_key'
@@ -222,6 +225,14 @@ export async function POST(request) {
     // A rejected key is the caller's problem to fix, not an upstream outage —
     // it needs its own code so the UI can reopen the key form.
     if (isKeyRejection(err)) {
+      // A broken shared key is the operator's to fix — do not send a gate
+      // member off to check a key they never entered.
+      if (keySource === 'server') {
+        return Response.json({
+          error: 'The shared SochGuru key is not working right now. Add your own Gemini key to keep going.',
+          code: 'server_key_bad'
+        }, { status: 502 })
+      }
       return Response.json({
         error: 'Gemini rejected that key. Check it was copied in full and has the Generative Language API enabled.',
         code: 'bad_key'

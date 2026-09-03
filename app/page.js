@@ -107,7 +107,7 @@ function ChipGroup({ legend, hint, options, value, onChange }) {
 /** Key entry for Basic. The key is held in this browser and travels only with
  *  the user's own generate requests — the server keeps none and has no fallback
  *  of its own, so nobody can spend anyone else's quota. */
-function KeyForm({ saved, onSave, onCancel }) {
+function KeyForm({ saved, onSave, onCancel, canCancel }) {
   const [draft, setDraft] = useState('')
   const [reveal, setReveal] = useState(false)
 
@@ -147,7 +147,7 @@ function KeyForm({ saved, onSave, onCancel }) {
         >{reveal ? 'Hide' : 'Show'}</button>
       </div>
       <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
-        {saved && (
+        {canCancel && (
           <button type="button" onClick={onCancel} className="btn btn-ghost sm:flex-1">Cancel</button>
         )}
         <button type="submit" disabled={!draft.trim()} className="btn btn-primary sm:flex-[2]">
@@ -311,6 +311,9 @@ export default function Page() {
   // never falls back to a key of its own, so nobody spends anyone else's quota.
   const [geminiKey, setGeminiKey] = useState('')
   const [showKeyForm, setShowKeyForm] = useState(false)
+  // True only for visitors who entered the access code on an instance that has
+  // an operator key. They generate without bringing one; everyone else does not.
+  const [serverKeyCovers, setServerKeyCovers] = useState(false)
 
   // Memory management
   const [memory, setMemory] = useState([])
@@ -333,11 +336,23 @@ export default function Page() {
   }, [])
 
   /* ---------------- boot ---------------- */
+  const readAccess = useCallback(() => fetch('/api/access')
+    .then(r => r.json())
+    .then(d => {
+      setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
+      setServerKeyCovers(!!d.serverKeyAvailable)
+      return d
+    }), [])
+
   useEffect(() => {
     let cancelled = false
     fetch('/api/access')
       .then(r => r.json())
-      .then(d => { if (!cancelled) setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked') })
+      .then(d => {
+        if (cancelled) return
+        setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
+        setServerKeyCovers(!!d.serverKeyAvailable)
+      })
       .catch(() => { if (!cancelled) setGate('open') })
     return () => { cancelled = true }
   }, [])
@@ -678,8 +693,9 @@ export default function Page() {
       return
     }
     // Ask here rather than round-tripping to a 400 — it keeps the answers on
-    // screen instead of bouncing the user to the error step.
-    if (!geminiKey) {
+    // screen instead of bouncing the user to the error step. Gate members the
+    // operator's key covers are never asked.
+    if (!geminiKey && !serverKeyCovers) {
       setShowKeyForm(true)
       return
     }
@@ -700,7 +716,8 @@ export default function Page() {
         headers: {
           'Content-Type': 'application/json',
           // Header, not body: keeps the key out of request logs and analytics.
-          'x-gemini-key': geminiKey
+          // Omitted when the operator's key covers this visitor.
+          ...(geminiKey && { 'x-gemini-key': geminiKey })
         },
         body: JSON.stringify(payload)
       })
@@ -708,7 +725,7 @@ export default function Page() {
       if (res.status === 401) { setGate('locked'); return }
       // A rejected or missing key is fixable in place — reopen the form rather
       // than stranding the user on the generic error step.
-      if (data.code === 'no_key' || data.code === 'bad_key') {
+      if (data.code === 'no_key' || data.code === 'bad_key' || data.code === 'server_key_bad') {
         setBasicStep(2)
         setShowKeyForm(true)
         setBasicError(data.error)
@@ -891,7 +908,9 @@ export default function Page() {
   if (gate === 'locked') {
     return (
       <>
-        <AccessGate onUnlock={() => setGate('open')} />
+        {/* Re-read after unlocking: the cookie is what decides whether the
+            operator's key covers this visitor. */}
+        <AccessGate onUnlock={() => { setGate('open'); readAccess().catch(() => {}) }} />
         <Toasts items={toasts} dismiss={dismissToast} />
       </>
     )
@@ -1267,18 +1286,31 @@ export default function Page() {
 
               {basicError && <div className="note note-err mt-6" role="alert">{basicError}</div>}
 
-              {(showKeyForm || !geminiKey) ? (
+              {showKeyForm || (!geminiKey && !serverKeyCovers) ? (
                 <KeyForm
                   saved={!!geminiKey}
+                  canCancel={!!geminiKey || serverKeyCovers}
                   onSave={k => { saveGeminiKey(k); setShowKeyForm(false); setBasicError('') }}
                   onCancel={() => setShowKeyForm(false)}
                 />
-              ) : (
+              ) : geminiKey ? (
                 <KeyStatus
                   value={geminiKey}
                   onChange={() => setShowKeyForm(true)}
                   onRemove={() => { saveGeminiKey(''); setShowKeyForm(true) }}
                 />
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-6">
+                  <p className="t-sm">
+                    <span style={{ color: 'var(--ink)' }}>Running on the SochGuru key</span>{' '}
+                    — your access code covers this one.
+                  </p>
+                  <button
+                    onClick={() => setShowKeyForm(true)}
+                    className="t-sm tap-link"
+                    style={{ color: 'var(--accent)' }}
+                  >Use my own key</button>
+                </div>
               )}
 
               <div className="flex flex-col-reverse sm:flex-row gap-3 mt-9">

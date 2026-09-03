@@ -1,4 +1,4 @@
-import { ACCESS_COOKIE, accessToken, gateEnabled, isAuthorized, safeEqual, rateLimit, readJson, HttpError, sameOrigin } from '../../../lib/security'
+import { ACCESS_COOKIE, accessToken, gateEnabled, isAuthorized, safeEqual, rateLimit, readJson, HttpError, sameOrigin, serverKeyAvailable } from '../../../lib/security'
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
 
@@ -16,7 +16,14 @@ function cookieHeader(value, maxAge) {
 
 /** Lets the client decide between the lock screen and the app, without leaking the code. */
 export async function GET(request) {
-  return Response.json({ gateEnabled: gateEnabled(), authorized: isAuthorized(request) })
+  return Response.json({
+    gateEnabled: gateEnabled(),
+    authorized: isAuthorized(request),
+    // Tells a gate member they can skip the key form because the operator's
+    // key will cover them. False for everyone else, so anonymous visitors are
+    // still asked for their own.
+    serverKeyAvailable: serverKeyAvailable(request)
+  })
 }
 
 export async function POST(request) {
