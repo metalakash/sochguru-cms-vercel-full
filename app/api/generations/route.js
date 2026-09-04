@@ -36,6 +36,6 @@ export async function GET(request) {
     return Response.json({ rows, totals })
   } catch (err) {
     console.error('[generations]', err.message)
-    return Response.json({ error: 'Could not read the record store.' }, { status: 502 })
+    return Response.json({ error: err.message, code: 'db_error' }, { status: 502 })
   }
 }
