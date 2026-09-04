@@ -107,7 +107,7 @@ function ChipGroup({ legend, hint, options, value, onChange }) {
 /** Key entry for Basic. The key is held in this browser and travels only with
  *  the user's own generate requests — the server keeps none and has no fallback
  *  of its own, so nobody can spend anyone else's quota. */
-function KeyForm({ saved, onSave, onCancel, canCancel }) {
+function KeyForm({ saved, onSave, onCancel, canCancel, recordsKept }) {
   const [draft, setDraft] = useState('')
   const [reveal, setReveal] = useState(false)
 
@@ -156,8 +156,8 @@ function KeyForm({ saved, onSave, onCancel, canCancel }) {
       </div>
       <p className="t-sm mt-4">
         Stored in this browser only. It is sent with your own requests so they can reach
-        Gemini, and is never written to the server or shared with anyone. What you write
-        in the box above <em>is</em> saved — the key is not.
+        Gemini, and is never written to the server or shared with anyone.
+        {recordsKept && <> What you write in the box above <em>is</em> saved — the key is not.</>}
       </p>
     </form>
   )
@@ -315,6 +315,9 @@ export default function Page() {
   // True only for visitors who entered the access code on an instance that has
   // an operator key. They generate without bringing one; everyone else does not.
   const [serverKeyCovers, setServerKeyCovers] = useState(false)
+  // Whether this instance actually keeps records. The page must not promise
+  // people their prompts are stored on an instance that stores nothing.
+  const [recordsKept, setRecordsKept] = useState(false)
 
   // Memory management
   const [memory, setMemory] = useState([])
@@ -342,6 +345,7 @@ export default function Page() {
     .then(d => {
       setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
       setServerKeyCovers(!!d.serverKeyAvailable)
+      setRecordsKept(!!d.recordsKept)
       return d
     }), [])
 
@@ -353,6 +357,7 @@ export default function Page() {
         if (cancelled) return
         setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
         setServerKeyCovers(!!d.serverKeyAvailable)
+        setRecordsKept(!!d.recordsKept)
       })
       .catch(() => { if (!cancelled) setGate('open') })
     return () => { cancelled = true }
@@ -947,7 +952,8 @@ export default function Page() {
           </button>
 
           <p className="t-sm mono mt-4">
-            No signup · Your own Gemini key · Your prompts are saved
+            No signup · Your own Gemini key ·{' '}
+            {recordsKept ? 'Your prompts are saved' : 'Nothing posts without you'}
           </p>
         </section>
 
@@ -1033,14 +1039,16 @@ export default function Page() {
               call is billed to your Google account at their rates, so what you generate
               is yours and costs nobody else anything.
             </p>
-            <p>
-              <span style={{color:'var(--ink)'}}>What you write here is saved.</span>{' '}
-              Your idea, the answers you tap, and the drafts that come back are stored so
-              I can see what people are actually using this for and make it better. Your
-              API key is the one thing that is not — it is used for your request and
-              thrown away. If that trade is not for you, this is the moment to close the
-              tab rather than the moment to find out later.
-            </p>
+            {recordsKept && (
+              <p>
+                <span style={{color:'var(--ink)'}}>What you write here is saved.</span>{' '}
+                Your idea, the answers you tap, and the drafts that come back are stored so
+                I can see what people are actually using this for and make it better. Your
+                API key is the one thing that is not — it is used for your request and
+                thrown away. If that trade is not for you, this is the moment to close the
+                tab rather than the moment to find out later.
+              </p>
+            )}
             <p>
               <span style={{color:'var(--ink)'}}>The Nepali is Romanized, not Devanagari.</span>{' '}
               It reads naturally in a Facebook feed, but check it before posting — AI
@@ -1299,6 +1307,7 @@ export default function Page() {
                 <KeyForm
                   saved={!!geminiKey}
                   canCancel={!!geminiKey || serverKeyCovers}
+                  recordsKept={recordsKept}
                   onSave={k => { saveGeminiKey(k); setShowKeyForm(false); setBasicError('') }}
                   onCancel={() => setShowKeyForm(false)}
                 />

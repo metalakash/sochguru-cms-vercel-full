@@ -1,4 +1,5 @@
 import { ACCESS_COOKIE, accessToken, gateEnabled, isAuthorized, safeEqual, rateLimit, readJson, HttpError, sameOrigin, serverKeyAvailable } from '../../../lib/security'
+import { dbConfigured } from '../../../lib/db'
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
 
@@ -22,7 +23,11 @@ export async function GET(request) {
     // Tells a gate member they can skip the key form because the operator's
     // key will cover them. False for everyone else, so anonymous visitors are
     // still asked for their own.
-    serverKeyAvailable: serverKeyAvailable(request)
+    serverKeyAvailable: serverKeyAvailable(request),
+    // Whether this instance actually keeps records. The page promises people
+    // their prompts are stored, and that promise has to track reality — an
+    // instance with no DATABASE_URL keeps nothing and must not claim otherwise.
+    recordsKept: dbConfigured()
   })
 }
 
