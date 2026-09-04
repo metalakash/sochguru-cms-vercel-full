@@ -43,6 +43,21 @@ const AUDIENCE_OPTIONS = ['Dev peers', 'Tech, broadly', 'Business owners', 'My n
 
 const wordCount = s => s.trim().split(/\s+/).filter(Boolean).length
 
+/** Compact timestamp for the record list — recent things stay relative, older
+ *  ones get a real date, because "14 days ago" stops being useful. */
+function whenLabel(iso) {
+  const then = new Date(iso)
+  if (Number.isNaN(then.getTime())) return ''
+  const mins = Math.floor((Date.now() - then.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (mins < 60 * 24) return `${Math.floor(mins / 60)}h ago`
+  if (mins < 60 * 24 * 7) return `${Math.floor(mins / 1440)}d ago`
+  return then.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+const nfmt = n => (Number.isFinite(n) ? n.toLocaleString() : '—')
+
 /* ------------------------------------------------------------------ */
 /* Small presentational pieces                                         */
 /* ------------------------------------------------------------------ */
@@ -318,6 +333,15 @@ export default function Page() {
   // Whether this instance actually keeps records. The page must not promise
   // people their prompts are stored on an instance that stores nothing.
   const [recordsKept, setRecordsKept] = useState(false)
+  // A gate member is someone who entered the access code on an instance that
+  // has one — the operator, in practice. Only they are offered the record view.
+  const [isMember, setIsMember] = useState(false)
+
+  // Operator record view
+  const [showRecords, setShowRecords] = useState(false)
+  const [records, setRecords] = useState(null)
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [recordsError, setRecordsError] = useState('')
 
   // Memory management
   const [memory, setMemory] = useState([])
@@ -346,6 +370,7 @@ export default function Page() {
       setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
       setServerKeyCovers(!!d.serverKeyAvailable)
       setRecordsKept(!!d.recordsKept)
+      setIsMember(!!d.gateEnabled && !!d.authorized)
       return d
     }), [])
 
@@ -358,6 +383,7 @@ export default function Page() {
         setGate(!d.gateEnabled || d.authorized ? 'open' : 'locked')
         setServerKeyCovers(!!d.serverKeyAvailable)
         setRecordsKept(!!d.recordsKept)
+        setIsMember(!!d.gateEnabled && !!d.authorized)
       })
       .catch(() => { if (!cancelled) setGate('open') })
     return () => { cancelled = true }
@@ -573,6 +599,36 @@ export default function Page() {
     } catch (err) {
       toast('Could not load activity.')
     }
+  }
+
+  /** Operator record view. Distinguishes "you cannot read this" from "there is
+   *  nothing to read" from "nothing is being recorded" — three very different
+   *  problems that all look like an empty screen otherwise. */
+  const fetchRecords = async () => {
+    setRecordsLoading(true)
+    setRecordsError('')
+    try {
+      const res = await fetch('/api/generations?limit=100')
+      const data = await res.json()
+      if (!res.ok) {
+        setRecords(null)
+        setRecordsError(data.code === 'no_db'
+          ? 'no_db'
+          : data.code === 'locked' ? 'locked' : (data.error || 'Could not load records.'))
+        return
+      }
+      setRecords(data)
+    } catch {
+      setRecordsError('Could not reach the record store.')
+    } finally {
+      setRecordsLoading(false)
+    }
+  }
+
+  const openRecords = () => {
+    setShowMemory(false)
+    setShowRecords(true)
+    fetchRecords()
   }
 
   const clearAnalytics = async () => {
@@ -926,7 +982,7 @@ export default function Page() {
      `showMemory` falls through to the shell below, which is where the dashboard
      lives — otherwise the footer's Memory button set state nobody rendered. */
 
-  if (!mode && !showMemory) return (
+  if (!mode && !showMemory && !showRecords) return (
     <div className="min-h-screen">
       <div className="max-w-3xl mx-auto px-6">
 
@@ -1079,11 +1135,20 @@ export default function Page() {
 
         <footer className="hairline py-10 flex items-center justify-between">
           <p className="t-sm mono">Built in Hadigaun, Kathmandu</p>
-          {memory.length > 0 && (
-            <button onClick={() => setShowMemory(true)} className="tap-link text-xs">
-              📚 Memory ({memory.length})
-            </button>
-          )}
+          <div className="flex items-center gap-4">
+            {/* Offered only to gate members — the operator, in practice. A
+                visitor would just be handed a 401. */}
+            {isMember && (
+              <button onClick={openRecords} className="tap-link text-xs">
+                Records
+              </button>
+            )}
+            {memory.length > 0 && (
+              <button onClick={() => setShowMemory(true)} className="tap-link text-xs">
+                📚 Memory ({memory.length})
+              </button>
+            )}
+          </div>
         </footer>
       </div>
       <Toasts items={toasts} dismiss={dismissToast} />
@@ -1096,10 +1161,10 @@ export default function Page() {
     <div className="min-h-screen p-4 max-w-6xl mx-auto">
       <header className="flex justify-between items-center gap-4 py-5 mb-8" style={{borderBottom:'1px solid var(--line)'}}>
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={()=>{setShowMemory(false); setMode(null)}} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
+          <button onClick={()=>{setShowMemory(false); setShowRecords(false); setMode(null)}} className="t-sm tap-link hover:opacity-70 transition shrink-0" style={{color:'var(--ink-3)'}}>← Back</button>
           <div className="min-w-0">
             <h1 className="text-base font-semibold truncate">
-              SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{showMemory ? 'Memory' : mode==='basic' ? 'Basic' : 'Pro'}</span>
+              SochGuru <span style={{color:'var(--ink-3)'}}>/</span> <span style={{color:'var(--accent)'}}>{showRecords ? 'Records' : showMemory ? 'Memory' : mode==='basic' ? 'Basic' : 'Pro'}</span>
             </h1>
           </div>
         </div>
@@ -1516,6 +1581,116 @@ export default function Page() {
       )}
 
       {/* ---------------- Memory dashboard ---------------- */}
+
+      {showRecords && (
+        <div className="max-w-4xl mx-auto pb-16">
+          <div className="mb-8">
+            <button onClick={() => setShowRecords(false)} className="tap-link mb-4">← Back</button>
+            <div className="flex items-baseline justify-between gap-4 flex-wrap mb-2">
+              <h2 className="t-h1">Records</h2>
+              <button onClick={fetchRecords} disabled={recordsLoading} className="btn btn-ghost btn-sm">
+                {recordsLoading ? <Pending label="Loading…" /> : 'Refresh'}
+              </button>
+            </div>
+            <p className="t-body">
+              What people have generated here. Prompts and the answers they tapped — never their keys.
+            </p>
+          </div>
+
+          {recordsLoading && !records && <GeneratingSkeleton />}
+
+          {/* Three different empty screens, because they are three different
+              problems and a blank page tells you nothing about which. */}
+          {recordsError === 'no_db' && (
+            <div className="card p-6 space-y-3">
+              <p className="t-label mono">Nothing is being recorded</p>
+              <p className="t-body">
+                This instance has no database. Set <span className="mono" style={{color:'var(--ink)'}}>DATABASE_URL</span>{' '}
+                to a Postgres connection string and redeploy — generations start landing
+                here from that moment, and the landing page begins telling visitors so.
+              </p>
+            </div>
+          )}
+
+          {recordsError === 'locked' && (
+            <div className="card p-6 space-y-3">
+              <p className="t-label mono">Locked</p>
+              <p className="t-body">
+                This view needs the access code. It holds other people's prompts, so it
+                stays shut whenever <span className="mono" style={{color:'var(--ink)'}}>CMS_ACCESS_CODE</span>{' '}
+                is unset rather than falling open.
+              </p>
+            </div>
+          )}
+
+          {recordsError && recordsError !== 'no_db' && recordsError !== 'locked' && (
+            <div className="note note-err" role="alert">{recordsError}</div>
+          )}
+
+          {records && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+                {[
+                  ['Generations', nfmt(records.totals?.total), null],
+                  ['Succeeded', nfmt(records.totals?.succeeded),
+                    records.totals?.failed > 0 ? `${nfmt(records.totals.failed)} failed` : null],
+                  ['Tokens', nfmt(records.totals?.tokens), 'all callers'],
+                  ['On your key', nfmt(records.totals?.on_server_key),
+                    `${nfmt(records.totals?.on_user_key)} on their own`]
+                ].map(([label, value, sub]) => (
+                  <div key={label} className="card p-4">
+                    <p className="t-label mono mb-1">{label}</p>
+                    <p className="text-xl font-semibold" style={{color:'var(--ink)', fontVariantNumeric:'tabular-nums'}}>{value}</p>
+                    {sub && <p className="t-sm mt-0.5">{sub}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {records.rows.length === 0 ? (
+                <div className="card p-6 text-center">
+                  <p className="t-body" style={{color:'var(--ink-3)'}}>
+                    The store is connected and empty. The next generation anyone runs shows up here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {records.rows.map(r => (
+                    <div key={r.id} className="card p-5">
+                      <div className="flex items-center gap-2 flex-wrap mb-3">
+                        <span className="t-label mono">{whenLabel(r.created_at)}</span>
+                        <span className={`pill mono ${r.key_source === 'server' ? 'pill-accent' : 'pill-muted'}`}>
+                          {r.key_source === 'server' ? 'YOUR KEY' : 'OWN KEY'}
+                        </span>
+                        {!r.ok && <span className="pill mono" style={{color:'var(--err)'}}>{r.error_code || 'FAILED'}</span>}
+                      </div>
+
+                      <p className="t-body whitespace-pre-wrap mb-3" style={{color:'var(--ink)'}}>{r.prompt}</p>
+
+                      {(r.niche || r.intent || r.audience || r.context) && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {[r.niche, r.intent, r.audience].filter(Boolean).map((v, i) => (
+                            <span key={i} className="pill pill-muted">{v}</span>
+                          ))}
+                          {r.context && <span className="pill pill-muted">“{r.context}”</span>}
+                        </div>
+                      )}
+
+                      <p className="t-sm mono">
+                        {[
+                          r.total_tokens ? `${nfmt(r.total_tokens)} tokens` : null,
+                          r.variations ? `${r.variations} variations` : null,
+                          r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : null,
+                          r.model
+                        ].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {showMemory && (
         <div className="max-w-3xl mx-auto pb-16">
