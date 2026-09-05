@@ -965,19 +965,6 @@ export default function Page() {
     selectedVersion: activeVariant.label || `Version ${variantIdx + 1}`
   }
 
-  /* ---------------- gate ---------------- */
-
-  if (gate === 'locked') {
-    return (
-      <>
-        {/* Re-read after unlocking: the cookie is what decides whether the
-            operator's key covers this visitor. */}
-        <AccessGate onUnlock={() => { setGate('open'); readAccess().catch(() => {}) }} />
-        <Toasts items={toasts} dismiss={dismissToast} />
-      </>
-    )
-  }
-
   /* ---------------- landing ----------------
      `showMemory` falls through to the shell below, which is where the dashboard
      lives — otherwise the footer's Memory button set state nobody rendered. */
